@@ -123,30 +123,59 @@ methods: {
   },
 
   isContinuousDates(rowId) {
-    const days = Array.from({ length: 30 }, (_, i) => i + 1); // Array of days in June
-    let lastFound = 0;
-    for (const day of days) {
-      const key = `${rowId}-${day}`;
-      if (this.selectedDates[key]) {
-        if (day - lastFound > 1) {
-          return false; // A gap is found
-        }
-        lastFound = day;
-      }
-    }
-    return true;
-  },
+  let firstSelectedDay = null;
+  let lastSelectedDay = null;
 
-  toggleConfirmation(rowId) {
-    if (this.isContinuousDates(rowId)) {
-      this.confirmedRows = {
-        ...this.confirmedRows,
-        [rowId]: !this.confirmedRows[rowId]
-      };
-    } else {
-      alert('Cannot confirm row with gaps in dates. Please select continuous dates.');
+  // Find the first and last selected days
+  for (let day = 1; day <= 30; day++) {
+    const key = `${rowId}-${day}`;
+    if (this.selectedDates[key]) {
+      if (firstSelectedDay === null) firstSelectedDay = day;
+      lastSelectedDay = day;
     }
-  },
+  }
+
+  // Check for continuous selection between the first and last selected days
+  for (let day = firstSelectedDay; day <= lastSelectedDay; day++) {
+    const key = `${rowId}-${day}`;
+    if (!this.selectedDates[key]) {
+      // Found a gap within the selected range
+      return false;
+    }
+  }
+
+  // No gaps found within the range
+  return true;
+},
+
+toggleConfirmation(rowId) {
+  // Check if both Main Makkah and Madinah are selected
+  const hasMainMakkah = this.checkForArea(rowId, 'mainMakkah');
+  const hasMadinah = this.checkForArea(rowId, 'madinah');
+
+  if (hasMainMakkah && hasMadinah) {
+    this.confirmedRows = {
+      ...this.confirmedRows,
+      [rowId]: !this.confirmedRows[rowId]
+    };
+  } else {
+    alert('To confirm, please ensure both Main Makkah and Madinah areas are selected.');
+  }
+},
+
+checkForArea(rowId, area) {
+  for (let day = 1; day <= 30; day++) {
+    const key = `${rowId}-${day}`;
+    if (this.selectedDates[key] === area) {
+      return true;
+    }
+  }
+  return false;
+},
+
+
+
+
 
   hoverOnButton(rowId, isHovering) {
     this.hoveredRows = {
@@ -162,6 +191,8 @@ methods: {
   };
   // Additional logic for a confirmed row
 },
+
+
 
 initializeRoomSettings(count) {
   let settings = {};
@@ -278,12 +309,24 @@ getCellText(rowId, day) {
   const location = this.selectedDates[`${rowId}-${day}`];
   if (location) {
     const roomSetting = this.roomSettings[rowId];
-    const numberOfRooms = roomSetting?.numberOfRooms || 0;
-    return numberOfRooms > 0 ? numberOfRooms.toString() : '-';
+
+    if (location === 'shiftingMakkah') {
+      // Calculate number of rooms for Shifting Makkah based on Main Makkah pilgrims
+      const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', rowId);
+      const shiftingRoomType = roomSetting?.shiftingRoomType || 'quadruple';
+      const roomCapacity = this.getRoomCapacity(shiftingRoomType);
+      const numberOfRooms = mainMakkahPilgrims > 0 ? Math.ceil(mainMakkahPilgrims / roomCapacity) : 0;
+      return numberOfRooms > 0 ? numberOfRooms.toString() : '-';
+    } else {
+      // Main Makkah or Madinah
+      const numberOfRooms = roomSetting?.numberOfRooms || 0;
+      return numberOfRooms > 0 ? numberOfRooms.toString() : '-';
+    }
   } else {
     return '-';
   }
 },
+
 getCellClass(rowId, day) {
       const location = this.selectedDates[`${rowId}-${day}`];
       return location ? location : '';
