@@ -11,6 +11,10 @@
     <button @click="addRoomLine">Add Room Line</button>
     <br><br>
 <button @click="clearUnconfirmedRows">Clear Unconfirmed Rows</button>
+<br><br>
+<button @click="toggleDisplayMode">
+      {{ displayMode === 'pilgrims' ? 'Show as Rooms' : 'Show as Pilgrims' }}
+    </button>
 <br>
 
     <br>
@@ -101,6 +105,7 @@ export default {
     summaryData: [],
     confirmedRows: {},
     hoveredRows: {},
+    displayMode: 'rooms', // Initial display mode
   };
 },
 
@@ -301,27 +306,37 @@ addRoomLine() {
 
 
 
-getCellText(rowId, day) {
-  const location = this.selectedDates[`${rowId}-${day}`];
-  if (location) {
-    const roomSetting = this.roomSettings[rowId];
+toggleDisplayMode() {
+      this.displayMode = this.displayMode === 'rooms' ? 'pilgrims' : 'rooms';
+    },
 
-    if (location === 'shiftingMakkah') {
-      // Calculate number of rooms for Shifting Makkah based on Main Makkah pilgrims
-      const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', rowId);
-      const shiftingRoomType = roomSetting?.shiftingRoomType || 'quadruple';
-      const roomCapacity = this.getRoomCapacity(shiftingRoomType);
-      const numberOfRooms = mainMakkahPilgrims > 0 ? Math.ceil(mainMakkahPilgrims / roomCapacity) : 0;
-      return numberOfRooms > 0 ? numberOfRooms.toString() : '-';
-    } else {
-      // Main Makkah or Madinah
-      const numberOfRooms = roomSetting?.numberOfRooms || 0;
-      return numberOfRooms > 0 ? numberOfRooms.toString() : '-';
-    }
-  } else {
-    return '-';
-  }
-},
+    getCellText(rowId, day) {
+      const location = this.selectedDates[`${rowId}-${day}`];
+      if (location) {
+        const roomSetting = this.roomSettings[rowId];
+
+        // Determine number of pilgrims or rooms based on location and display mode
+        if (location === 'shiftingMakkah') {
+          const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', rowId);
+          const shiftingRoomType = roomSetting?.shiftingRoomType || 'quadruple';
+          const roomCapacity = this.getRoomCapacity(shiftingRoomType);
+          const numberOfRooms = Math.ceil(mainMakkahPilgrims / roomCapacity);
+
+          return this.displayMode === 'rooms' 
+            ? (numberOfRooms > 0 ? numberOfRooms.toString() : '-')
+            : mainMakkahPilgrims.toString();
+        } else {
+          const roomCapacity = this.getRoomCapacity(roomSetting.mainRoomType);
+          const numberOfRooms = roomSetting?.numberOfRooms || 0;
+          const pilgrims = roomCapacity * numberOfRooms;
+
+          return this.displayMode === 'rooms' 
+            ? numberOfRooms.toString()
+            : pilgrims.toString();
+        }
+      }
+      return '-';
+    },
 
 getCellClass(rowId, day) {
       const location = this.selectedDates[`${rowId}-${day}`];
