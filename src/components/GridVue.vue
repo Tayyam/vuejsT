@@ -24,7 +24,10 @@
 									<table class="header-table">
 													<tr>
 																	<th>ID</th>
-																	<th v-for="date in dateRange" :key="date">{{ date.getDate() }}/{{ date.getMonth() + 1 }}</th>
+																	<th v-for="date in dateRange" :key="date" :class="{ 'holy-period': isHolyPeriod(date) }">
+            {{ date.getDate() }}/{{ date.getMonth() + 1 }}
+        </th>
+
 													</tr>
 													<tr v-for="(line, index) in roomLines" :key="index">
 																	<td>{{ index + 1 }}</td>
@@ -54,11 +57,12 @@
 																	</td>
 																	<td>
 																					<!-- Shifting Room Type Dropdown -->
-																					<select v-model="roomSettings[index + 1].shiftingRoomType" class="shifting-makkah-select">
-																									<option value="double">Double (2 pilgrims)</option>
-																									<option value="triple">Triple (3 pilgrims)</option>
-																									<option value="quadruple">Quadruple (4 pilgrims)</option>
-																					</select>
+																					<select v-model="roomSettings[index + 1].shiftingRoomType" class="shifting-makkah-select" :id="'shiftingRoomType-' + (index + 1)">
+    <option value="double">Double (2 pilgrims)</option>
+    <option value="triple">Triple (3 pilgrims)</option>
+    <option value="quadruple">Quadruple (4 pilgrims)</option>
+</select>
+
 																	</td>
 																	<td>
 																					<!-- Number of Rooms Input -->
@@ -122,15 +126,62 @@ export default {
 			displayMode: 'rooms', // Initial display mode
 			startDate: new Date(2024, 4, 25), // May 25th, 2024
 			endDate: new Date(2024, 6, 10),   // July 10th, 2024
+			holyPeriodStart: new Date(2024, 5, 15), // Holy period start date: June 15th, 2024
+   holyPeriodEnd: new Date(2024, 5, 19),   // Holy period end date: June 19th, 2024
 			dateRange: [],
 	};
 },
+
+watch: {
+  roomSettings: {
+    handler: 'adjustShiftingMakkahRoomType',
+    deep: true
+  }
+},
+
 
 created() {
 			this.initializeDateRange();
 	},
 
 methods: {
+
+	checkForAreaDuringHolyPeriod(rowId, area) {
+    // Iterate through the holy period dates
+    for (let date = new Date(this.holyPeriodStart); date <= this.holyPeriodEnd; date.setDate(date.getDate() + 1)) {
+        const dateString = this.formatDate(date);
+        const key = `${rowId}-${dateString}`;
+        // Check if the area is selected during the holy period
+        if (this.selectedDates[key] && this.selectedDates[key].includes(area)) {
+            return true; // Area is selected during the holy period
+        }
+    }
+    return false; // Area is not selected during the holy period
+},
+
+adjustShiftingMakkahRoomType() {
+    Object.entries(this.roomSettings).forEach(([lineId, settings]) => {
+        const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', parseInt(lineId));
+        const roomCapacity = this.getRoomCapacity(settings.shiftingRoomType);
+
+        // Check if the number of pilgrims for Shifting Makkah is not an integer multiple of the room capacity
+        if (mainMakkahPilgrims % roomCapacity !== 0) {
+            // Adjust the Shifting Makkah room type to match the Main Makkah room type
+            this.roomSettings[lineId].shiftingRoomType = this.roomSettings[lineId].mainRoomType;
+
+            // Change the input selection immediately
+            document.getElementById(`shiftingRoomType-${lineId}`).value = this.roomSettings[lineId].shiftingRoomType;
+        }
+    });
+},
+
+
+
+
+
+	isHolyPeriod(date) {
+      return date >= this.holyPeriodStart && date <= this.holyPeriodEnd;
+    },
 
 	initializeDateRange() {
 					let currentDate = new Date(this.startDate.getTime());
@@ -160,12 +211,13 @@ methods: {
 
 
 checkForArea(rowId, area) {
-	return this.dateRange.some(date => {
-			const dateString = this.formatDate(date);
-			const key = `${rowId}-${dateString}`;
-			return this.selectedDates[key] === area;
-	});
+    return this.dateRange.some(date => {
+        const dateString = this.formatDate(date);
+        const key = `${rowId}-${dateString}`;
+        return this.selectedDates[key] && this.selectedDates[key].includes(area);
+    });
 },
+
 
 
 isContinuousDates(rowId) {
@@ -200,20 +252,104 @@ isContinuousDates(rowId) {
 },
 
 
-			toggleConfirmation(rowId) {
-					const hasMainMakkah = this.checkForArea(rowId, 'mainMakkah');
-					const hasMadinah = this.checkForArea(rowId, 'madinah');
-					const continuousDates = this.isContinuousDates(rowId);
+toggleConfirmation(rowId) {
+    // Checks for area selection and date continuity
+    const hasMainMakkah = this.checkForArea(rowId, 'mainMakkah');
+    const hasMadinah = this.checkForArea(rowId, 'madinah');
+    const continuousDates = this.isContinuousDates(rowId);
+    const isHolyPeriodIncluded = this.isHolyPeriodIncluded(rowId);
+    const hasMadinahDuringHolyPeriod = this.checkForAreaDuringHolyPeriod(rowId, 'madinah');
 
-					if (hasMainMakkah && hasMadinah && continuousDates) {
-							this.confirmedRows = {
-									...this.confirmedRows,
-									[rowId]: !this.confirmedRows[rowId]
-							};
-					} else {
-							alert('To confirm, ensure both Main Makkah and Madinah areas are selected and the dates are continuous.');
-					}
-			},
+    // Define area requirements
+    const areaRequirements = {
+        mainMakkah: { min: 3, max: 15 },
+        shiftingMakkah: { min: 3, max: 15 },
+        madinah: { min: 2, max: 15 },
+        overall: { min: 13, max: 25 },
+    };
+
+    // Calculate selected days for each area
+    const selectedDays = this.calculateSelectedDaysForAreas(rowId);
+
+    let alertMessages = [];
+    Object.entries(areaRequirements).forEach(([area, { min, max }]) => {
+        // Check for total period only once
+        if (area === 'overall') {
+            if (selectedDays.total < min || selectedDays.total > max) {
+                alertMessages.push(`Total period must be between ${min} and ${max} days. Currently selected: ${selectedDays.total} days.`);
+            }
+        } else if (selectedDays[area] > 0 && (selectedDays[area] < min || selectedDays[area] > max)) {
+            alertMessages.push(`${area.charAt(0).toUpperCase() + area.slice(1)} period must be between ${min} and ${max} days. Currently selected: ${selectedDays[area]} days.`);
+        }
+    });
+
+    // Add messages for initial checks if needed
+    if (!hasMainMakkah || !hasMadinah || !continuousDates || !isHolyPeriodIncluded || hasMadinahDuringHolyPeriod) {
+        if (!hasMainMakkah) alertMessages.push("Main Makkah area is not selected.");
+        if (!hasMadinah) alertMessages.push("Madinah area is not selected.");
+        if (!continuousDates) alertMessages.push("Selected dates are not continuous.");
+        if (!isHolyPeriodIncluded) alertMessages.push("Holy period is not fully included.");
+        if (hasMadinahDuringHolyPeriod) alertMessages.push("Madinah area is selected during the holy period.");
+    }
+
+    // Display all collected alert messages
+    if (alertMessages.length) {
+        alert(alertMessages.join("\n"));
+    } else {
+        // Toggle confirmation if no issues found
+        this.confirmedRows[rowId] = !this.confirmedRows[rowId];
+    }
+},
+
+calculateSelectedDaysForAreas(rowId) {
+    const areaCounts = {
+        mainMakkah: 0,
+        shiftingMakkah: 0,
+        madinah: 0,
+        total: 0
+    };
+
+    // Iterate through all selected dates
+    Object.entries(this.selectedDates).forEach(([key, value]) => {
+        // Check if the current key belongs to the given rowId
+        if (key.startsWith(rowId + '-')) {
+            // Increment total days count
+            areaCounts.total += 1;
+
+            // Increment specific area counts based on the value (which is an array of selected areas)
+            value.forEach(area => {
+                if (area === 'mainMakkah') {
+                    areaCounts.mainMakkah += 1;
+                } else if (area === 'shiftingMakkah') {
+                    areaCounts.shiftingMakkah += 1;
+                } else if (area === 'madinah') {
+                    areaCounts.madinah += 1;
+                }
+            });
+        }
+    });
+
+    return areaCounts;
+},
+
+
+
+isHolyPeriodIncluded(rowId) {
+    const holyPeriodStart = new Date(2024, 5, 15); // Holy period start date (15th June 2024)
+    const holyPeriodEnd = new Date(2024, 5, 19); // Holy period end date (19th June 2024)
+
+    for (let date = new Date(holyPeriodStart); date <= holyPeriodEnd; date.setDate(date.getDate() + 1)) {
+        const dateString = this.formatDate(date);
+        const key = `${rowId}-${dateString}`;
+        if (!this.selectedDates[key]) {
+            return false; // Holy period is not fully included
+        }
+    }
+
+    return true; // Holy period is fully included
+},
+
+
 
 
 
@@ -259,193 +395,298 @@ addRoomLine() {
 },
 
 selectCell(rowId, date) {
-	if (this.confirmedRows[rowId]) {
-			alert('Editing is disabled for confirmed rows.');
-			return;
-	}
+    if (this.confirmedRows[rowId]) {
+        alert('Editing is disabled for confirmed rows.');
+        return;
+    }
 
-	const dateString = this.formatDate(date);
-	const key = `${rowId}-${dateString}`;
+    const dateString = this.formatDate(date);
+    const key = `${rowId}-${dateString}`;
 
-	if (!this.selectedHotelLocation) {
-			alert('Please select a location first.');
-			return;
-	}
+    if (!this.selectedHotelLocation) {
+        alert('Please select a location first.');
+        return;
+    }
 
-	if (this.selectedDates[key] && this.selectedDates[key] !== this.selectedHotelLocation) {
-			alert('You cannot modify cells in a different area. Please select another area to edit.');
-			return;
-	}
+    // Handle the scenario of selecting an intersection day
+    if (!this.selectedDates[key]) {
+        // If the cell is not yet selected, assign the selected location
+        this.selectedDates[key] = [this.selectedHotelLocation];
+    } else {
+        // If the cell is already selected, decide to add or remove the location
+        const locationIndex = this.selectedDates[key].indexOf(this.selectedHotelLocation);
+        if (locationIndex === -1) {
+            this.selectedDates[key].push(this.selectedHotelLocation);
+        } else {
+            this.selectedDates[key].splice(locationIndex, 1);
+            if (this.selectedDates[key].length === 0) {
+                delete this.selectedDates[key];
+            }
+        }
+    }
 
-	// Find any existing range for the same area on this row
-	const existingRange = this.findExistingRange(rowId, this.selectedHotelLocation);
+    // Find and adjust existing range, if necessary
+    const existingRange = this.findExistingRange(rowId, this.selectedHotelLocation);
+    if (existingRange) {
+        this.adjustExistingRange(rowId, date, existingRange);
+    }
 
-	if (this.selectedDates[key]) {
-			// If deselecting a cell within a selected range, then the whole range should be deselected
-			this.deselectDateRangeIncludingCell(rowId, dateString);
-	} else if (existingRange) {
-			// Expand or shrink the existing range to include the selected date
-			this.adjustExistingRange(rowId, date, existingRange);
-	} else {
-			// No existing range, select the individual cell
-			this.selectedDates[key] = this.selectedHotelLocation;
-	}
+    // Update to maintain reactivity
+    this.selectedDates = { ...this.selectedDates };
 
-	// Update to maintain reactivity
-	this.selectedDates = { ...this.selectedDates };
+				console.log(this.selectedDates);
 },
+
 
 
 findExistingRange(rowId, area) {
-	let rangeStart = null;
-	let rangeEnd = null;
+    let rangeStart = null;
+    let rangeEnd = null;
 
-	this.dateRange.forEach((date, index) => {
-			const dateString = this.formatDate(date);
-			const key = `${rowId}-${dateString}`;
-			if (this.selectedDates[key] === area) {
-					if (rangeStart === null) {
-							rangeStart = index;
-					}
-					rangeEnd = index;
-			}
-	});
+    this.dateRange.forEach((date, index) => {
+        const dateString = this.formatDate(date);
+        const key = `${rowId}-${dateString}`;
+        if (this.selectedDates[key] && this.selectedDates[key].includes(area)) {
+            if (rangeStart === null) {
+                rangeStart = index;
+            }
+            rangeEnd = index;
+        }
+    });
 
-	if (rangeStart !== null) {
-			return { start: rangeStart, end: rangeEnd };
-	}
-	return null;
+    if (rangeStart !== null) {
+        return { start: rangeStart, end: rangeEnd };
+    }
+    return null;
 },
 
 adjustExistingRange(rowId, date, existingRange) {
-	const dateIndex = this.dateRange.indexOf(date);
-	const newStart = Math.min(dateIndex, existingRange.start);
-	const newEnd = Math.max(dateIndex, existingRange.end);
+    const dateIndex = this.dateRange.indexOf(date);
+    const newStart = Math.min(dateIndex, existingRange.start);
+    const newEnd = Math.max(dateIndex, existingRange.end);
 
-	for (let i = newStart; i <= newEnd; i++) {
-			const rangeDate = this.dateRange[i];
-			const rangeDateString = this.formatDate(rangeDate);
-			this.selectedDates[`${rowId}-${rangeDateString}`] = this.selectedHotelLocation;
-	}
-},
-
-
-
-findClosestSelectedDate(rowId, targetDate) {
-	let closestDateIndex = null;
-
-	this.dateRange.forEach((date, index) => {
-			const dateString = this.formatDate(date);
-			const key = `${rowId}-${dateString}`;
-
-			if (this.selectedDates[key]) {
-					if (closestDateIndex === null || Math.abs(index - this.dateRange.indexOf(targetDate)) < Math.abs(closestDateIndex - this.dateRange.indexOf(targetDate))) {
-							closestDateIndex = index;
-					}
-			}
-	});
-
-	return closestDateIndex;
+    for (let i = newStart; i <= newEnd; i++) {
+        const rangeDate = this.dateRange[i];
+        const rangeDateString = this.formatDate(rangeDate);
+        const key = `${rowId}-${rangeDateString}`;
+        if (!this.selectedDates[key]) {
+            this.selectedDates[key] = [this.selectedHotelLocation];
+        } else if (!this.selectedDates[key].includes(this.selectedHotelLocation)) {
+            this.selectedDates[key].push(this.selectedHotelLocation);
+        }
+    }
 },
 
 deselectDateRangeIncludingCell(rowId, dateString) {
-	let startIndex = this.dateRange.findIndex(d => this.formatDate(d) === dateString);
-	let endIndex = startIndex;
+    let startIndex = this.dateRange.findIndex(d => this.formatDate(d) === dateString);
+    let endIndex = startIndex;
 
-	for (let i = startIndex - 1; i >= 0; i--) {
-			const checkDateString = this.formatDate(this.dateRange[i]);
-			if (this.selectedDates[`${rowId}-${checkDateString}`] === this.selectedHotelLocation) {
-					startIndex = i;
-			} else {
-					break;
-			}
-	}
+    for (let i = startIndex - 1; i >= 0; i--) {
+        const checkDateString = this.formatDate(this.dateRange[i]);
+        const key = `${rowId}-${checkDateString}`;
+        if (this.selectedDates[key] && this.selectedDates[key].includes(this.selectedHotelLocation)) {
+            startIndex = i;
+        } else {
+            break;
+        }
+    }
 
-	for (let i = startIndex + 1; i < this.dateRange.length; i++) {
-			const checkDateString = this.formatDate(this.dateRange[i]);
-			if (this.selectedDates[`${rowId}-${checkDateString}`] === this.selectedHotelLocation) {
-					endIndex = i;
-			} else {
-					break;
-			}
-	}
+    for (let i = startIndex + 1; i < this.dateRange.length; i++) {
+        const checkDateString = this.formatDate(this.dateRange[i]);
+        const key = `${rowId}-${checkDateString}`;
+        if (this.selectedDates[key] && this.selectedDates[key].includes(this.selectedHotelLocation)) {
+            endIndex = i;
+        } else {
+            break;
+        }
+    }
 
-	for (let i = startIndex; i <= endIndex; i++) {
-			const rangeDateString = this.formatDate(this.dateRange[i]);
-			delete this.selectedDates[`${rowId}-${rangeDateString}`];
-	}
+    for (let i = startIndex; i <= endIndex; i++) {
+        const rangeDateString = this.formatDate(this.dateRange[i]);
+        const key = `${rowId}-${rangeDateString}`;
+        const locationIndex = this.selectedDates[key].indexOf(this.selectedHotelLocation);
+        if (locationIndex > -1) {
+            this.selectedDates[key].splice(locationIndex, 1);
+            if (this.selectedDates[key].length === 0) {
+                delete this.selectedDates[key];
+            }
+        }
+    }
 
-	this.selectedDates = { ...this.selectedDates };
+    this.selectedDates = { ...this.selectedDates };
 },
+findClosestSelectedDate(rowId, targetDate) {
+    let closestDateIndex = null;
+    let minDistance = Infinity;
+
+    this.dateRange.forEach((date, index) => {
+        const dateString = this.formatDate(date);
+        const key = `${rowId}-${dateString}`;
+
+        if (this.selectedDates[key] && this.selectedDates[key].includes(this.selectedHotelLocation)) {
+            const distance = Math.abs(index - this.dateRange.indexOf(targetDate));
+            if (distance < minDistance) {
+                closestDateIndex = index;
+                minDistance = distance;
+            }
+        }
+    });
+
+    return closestDateIndex !== null ? this.dateRange[closestDateIndex] : null;
+},
+
+
+
+
+
 
 toggleDisplayMode() {
 					this.displayMode = this.displayMode === 'rooms' ? 'pilgrims' : 'rooms';
 			},
 
 			getCellText(rowId, date) {
-	const dateString = this.formatDate(date);
-	const key = `${rowId}-${dateString}`;
-	const location = this.selectedDates[key];
+    const dateString = this.formatDate(date);
+    const key = `${rowId}-${dateString}`;
+    const locations = this.selectedDates[key]; // This might be an array of locations
 
-	if (location) {
-			const roomSetting = this.roomSettings[rowId];
+    if (locations && locations.length) {
+        let textRepresentation = '-';
 
-			if (location === 'shiftingMakkah') {
-					const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', rowId);
-					const shiftingRoomType = roomSetting.shiftingRoomType || 'quadruple';
-					const roomCapacity = this.getRoomCapacity(shiftingRoomType);
-					const numberOfRooms = Math.ceil(mainMakkahPilgrims / roomCapacity);
+        // For handling multiple selections, iterate through each location
+        locations.forEach(location => {
+            const roomSetting = this.roomSettings[rowId];
 
-					return this.displayMode === 'rooms'
-							? (numberOfRooms > 0 ? numberOfRooms.toString() : '-')
-							: mainMakkahPilgrims.toString();
-			} else {
-					const roomCapacity = this.getRoomCapacity(roomSetting.mainRoomType);
-					const numberOfRooms = roomSetting.numberOfRooms || 0;
-					const pilgrims = roomCapacity * numberOfRooms;
+            if (location === 'shiftingMakkah') {
+                // Special logic for shifting Makkah
+                const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', rowId);
+                const shiftingRoomType = roomSetting.shiftingRoomType || 'quadruple';
+                const roomCapacity = this.getRoomCapacity(shiftingRoomType);
+                const numberOfRooms = Math.ceil(mainMakkahPilgrims / roomCapacity);
 
-					return this.displayMode === 'rooms'
-							? numberOfRooms.toString()
-							: pilgrims.toString();
-			}
-	}
-	return '-';
+                textRepresentation = this.displayMode === 'rooms' ?
+                    `${numberOfRooms}` : // Added "RM (S)" to denote Shifting Rooms
+                    `${mainMakkahPilgrims}`; // "P" for Pilgrims
+            } else {
+                // Logic for mainMakkah or madinah
+                const roomType = location === 'mainMakkah' ? roomSetting.mainRoomType : roomSetting.shiftingRoomType; // Assuming you have a setting for Madinah similar to shiftingRoomType for consistency
+                const roomCapacity = this.getRoomCapacity(roomType);
+                const numberOfRooms = roomSetting.numberOfRooms || 0;
+                const pilgrims = roomCapacity * numberOfRooms;
+
+                textRepresentation = this.displayMode === 'rooms' ?
+                    `${numberOfRooms}` : // "RM" for Rooms
+                    `${pilgrims}`; // "P" for Pilgrims
+            }
+        });
+
+        return textRepresentation;
+    }
+
+    return '-';
 },
+
 
 
 getCellClass(rowId, date) {
-	const dateString = this.formatDate(date);
-	const key = `${rowId}-${dateString}`;
-	const location = this.selectedDates[key];
-	return location ? location : '';
+    const dateString = this.formatDate(date);
+    const key = `${rowId}-${dateString}`;
+    const locations = this.selectedDates[key];
+
+    if (locations && locations.length > 0) {
+        // Handle intersection scenarios
+        if (locations.length > 1) {
+            return locations.join('-') + '-intersection';
+        } else {
+            // Return the class for a single location
+            return locations[0];
+        }
+    }
+
+    return '';
 },
+
 
 
 calculate() {
-	this.summaryData = [];
-	let map = new Map();
+    this.summaryData = [];
+    let map = new Map();
 
-	for (const [key, area] of Object.entries(this.selectedDates)) {
-			const [rowId, dateString] = key.split('-');
-			if (!this.confirmedRows[rowId]) {
-					continue; // Skip unconfirmed rows
-			}
-			// Correctly parse the dateString into a Date object
-			const [day, month] = dateString.split('/');
-			const date = new Date(2024, month - 1, day); // Year is fixed as 2024
-			const mapKey = `${area}-${rowId}`;
+    // Iterate through selectedDates and construct the map with aggregated data
+    for (const [key, areas] of Object.entries(this.selectedDates)) {
+        const [rowId, dateString] = key.split('-');
+        if (!this.confirmedRows[rowId]) {
+            continue; // Skip unconfirmed rows
+        }
 
-			if (!map.has(mapKey)) {
-					map.set(mapKey, []);
-			}
-			map.get(mapKey).push(date);
-	}
+        const [day, month] = dateString.split('/'); // Split dateString into day and month
+        const date = new Date(2024, month - 1, day); // Parse the date string directly
+        areas.forEach(area => {
+            const mapKey = `${area}-${rowId}`;
+            if (!map.has(mapKey)) {
+                map.set(mapKey, []);
+            }
+            map.get(mapKey).push(date);
+        });
+    }
 
-	map.forEach((dates, key) => {
-			const [area, rowId] = key.split('-');
-			this.pushSummaryData(area, rowId, dates);
-	});
+    // Process each area-rowId pair in the map
+    map.forEach((dates, key) => {
+        this.processAreaDates(key, dates);
+    });
 },
+
+
+processAreaDates(mapKey, dates) {
+    const [area, rowId] = mapKey.split('-');
+    dates.sort((a, b) => a - b);
+    let startDate = dates[0];
+    let endDate = dates[dates.length - 1];
+
+    const formattedStartDate = this.formatDate(startDate);
+    const formattedEndDate = this.formatDate(endDate);
+
+    if (area === 'mainMakkah' || area === 'madinah') {
+        const roomType = this.roomSettings[rowId]?.mainRoomType || '';
+        const numberOfRooms = this.roomSettings[rowId]?.numberOfRooms || 1;
+        const pilgrims = this.getRoomCapacity(roomType) * numberOfRooms;
+
+        this.summaryData.push({
+            id: this.summaryData.length + 1,
+            area,
+            from: formattedStartDate,
+            to: formattedEndDate,
+            room: rowId,
+            roomType,
+            numberOfRooms,
+            pilgrims
+        });
+    } else if (area === 'shiftingMakkah') {
+        const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', rowId);
+        let shiftingRoomType = this.roomSettings[rowId]?.shiftingRoomType || '';
+        const roomCapacity = this.getRoomCapacity(shiftingRoomType);
+
+        if (mainMakkahPilgrims % roomCapacity !== 0) {
+            // Adjusting Shifting Makkah room type to match Main Makkah
+            shiftingRoomType = this.roomSettings[rowId].mainRoomType;
+            this.roomSettings[rowId].shiftingRoomType = shiftingRoomType;
+        }
+
+        const numberOfRooms = Math.ceil(mainMakkahPilgrims / this.getRoomCapacity(shiftingRoomType));
+
+        this.summaryData.push({
+            id: this.summaryData.length + 1,
+            area: 'Shifting Makkah',
+            from: formattedStartDate,
+            to: formattedEndDate,
+            room: rowId,
+            roomType: shiftingRoomType,
+            numberOfRooms,
+            pilgrims: mainMakkahPilgrims,
+        });
+    }
+},
+
+
 
 pushSummaryData(area, rowId, dates) {
 	dates.sort((a, b) => a - b);
@@ -638,7 +879,26 @@ input[type="number"] {
 .data-table td.mainMakkah { background-color: #ffcccc; }
 .data-table td.shiftingMakkah { background-color: #ccccff; }
 .data-table td.madinah { background-color: #ccffcc; }
+
+/* Intersection styles */
+.mainMakkah-shiftingMakkah-intersection,
+.shiftingMakkah-mainMakkah-intersection {
+    background: linear-gradient(to right, #ffcccc 50%, #ccccff 50%);
+}
+
+.mainMakkah-madinah-intersection,
+.madinah-mainMakkah-intersection {
+    background: linear-gradient(to right, #ffcccc 50%, #ccffcc 50%);
+}
+
+.shiftingMakkah-madinah-intersection,
+.madinah-shiftingMakkah-intersection {
+    background: linear-gradient(to right, #ccccff 50%, #ccffcc 50%);
+}
+
+/* Style for the holy period header */
+.header-table .holy-period {
+    background-color: gold;
+}
+
 </style>
-
-
-
