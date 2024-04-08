@@ -255,6 +255,7 @@ isContinuousDates(rowId) {
 toggleConfirmation(rowId) {
     // Checks for area selection and date continuity
     const hasMainMakkah = this.checkForArea(rowId, 'mainMakkah');
+    const hasShiftingMakkah = this.checkForArea(rowId, 'shiftingMakkah');
     const hasMadinah = this.checkForArea(rowId, 'madinah');
     const continuousDates = this.isContinuousDates(rowId);
     const isHolyPeriodIncluded = this.isHolyPeriodIncluded(rowId);
@@ -273,7 +274,6 @@ toggleConfirmation(rowId) {
 
     let alertMessages = [];
     Object.entries(areaRequirements).forEach(([area, { min, max }]) => {
-        // Check for total period only once
         if (area === 'overall') {
             if (selectedDays.total < min || selectedDays.total > max) {
                 alertMessages.push(`Total period must be between ${min} and ${max} days. Currently selected: ${selectedDays.total} days.`);
@@ -283,23 +283,53 @@ toggleConfirmation(rowId) {
         }
     });
 
+    // Check for intersections
+    const intersections = this.countIntersections(rowId);
+    let intersectionRequirementMet = false;
+
+    if (hasShiftingMakkah && intersections === 2) {
+        intersectionRequirementMet = true;
+    } else if (!hasShiftingMakkah && intersections === 1) {
+        intersectionRequirementMet = true;
+    }
+
+    if (!intersectionRequirementMet) {
+        alertMessages.push("Intersection requirements not met.");
+    }
+
     // Add messages for initial checks if needed
-    if (!hasMainMakkah || !hasMadinah || !continuousDates || !isHolyPeriodIncluded || hasMadinahDuringHolyPeriod) {
+    if (!hasMainMakkah || !hasMadinah || !continuousDates || !isHolyPeriodIncluded || hasMadinahDuringHolyPeriod || !intersectionRequirementMet) {
         if (!hasMainMakkah) alertMessages.push("Main Makkah area is not selected.");
         if (!hasMadinah) alertMessages.push("Madinah area is not selected.");
         if (!continuousDates) alertMessages.push("Selected dates are not continuous.");
         if (!isHolyPeriodIncluded) alertMessages.push("Holy period is not fully included.");
         if (hasMadinahDuringHolyPeriod) alertMessages.push("Madinah area is selected during the holy period.");
-    }
-
-    // Display all collected alert messages
-    if (alertMessages.length) {
-        alert(alertMessages.join("\n"));
     } else {
         // Toggle confirmation if no issues found
         this.confirmedRows[rowId] = !this.confirmedRows[rowId];
     }
+
+    if (alertMessages.length) {
+        alert(alertMessages.join("\n"));
+    }
 },
+
+countIntersections(rowId) {
+    let intersectionCount = 0;
+
+    this.dateRange.forEach(date => {
+        const dateString = this.formatDate(date);
+        const key = `${rowId}-${dateString}`;
+        const locations = this.selectedDates[key];
+
+        if (locations && locations.length > 1) {
+            intersectionCount++;
+        }
+    });
+
+    return intersectionCount;
+},
+
 
 calculateSelectedDaysForAreas(rowId) {
     const areaCounts = {
