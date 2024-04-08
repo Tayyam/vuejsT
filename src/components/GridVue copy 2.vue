@@ -57,11 +57,12 @@
 																	</td>
 																	<td>
 																					<!-- Shifting Room Type Dropdown -->
-																					<select v-model="roomSettings[index + 1].shiftingRoomType" class="shifting-makkah-select">
-																									<option value="double">Double (2 pilgrims)</option>
-																									<option value="triple">Triple (3 pilgrims)</option>
-																									<option value="quadruple">Quadruple (4 pilgrims)</option>
-																					</select>
+																					<select v-model="roomSettings[index + 1].shiftingRoomType" class="shifting-makkah-select" :id="'shiftingRoomType-' + (index + 1)">
+    <option value="double">Double (2 pilgrims)</option>
+    <option value="triple">Triple (3 pilgrims)</option>
+    <option value="quadruple">Quadruple (4 pilgrims)</option>
+</select>
+
 																	</td>
 																	<td>
 																					<!-- Number of Rooms Input -->
@@ -131,6 +132,14 @@ export default {
 	};
 },
 
+watch: {
+  roomSettings: {
+    handler: 'adjustShiftingMakkahRoomType',
+    deep: true
+  }
+},
+
+
 created() {
 			this.initializeDateRange();
 	},
@@ -149,6 +158,25 @@ methods: {
     }
     return false; // Area is not selected during the holy period
 },
+
+adjustShiftingMakkahRoomType() {
+    Object.entries(this.roomSettings).forEach(([lineId, settings]) => {
+        const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', parseInt(lineId));
+        const roomCapacity = this.getRoomCapacity(settings.shiftingRoomType);
+
+        // Check if the number of pilgrims for Shifting Makkah is not an integer multiple of the room capacity
+        if (mainMakkahPilgrims % roomCapacity !== 0) {
+            // Adjust the Shifting Makkah room type to match the Main Makkah room type
+            this.roomSettings[lineId].shiftingRoomType = this.roomSettings[lineId].mainRoomType;
+
+            // Change the input selection immediately
+            document.getElementById(`shiftingRoomType-${lineId}`).value = this.roomSettings[lineId].shiftingRoomType;
+        }
+    });
+},
+
+
+
 
 
 	isHolyPeriod(date) {
@@ -380,34 +408,97 @@ selectCell(rowId, date) {
         return;
     }
 
-    // Handle the scenario of selecting an intersection day
+    // Toggle the selection
     if (!this.selectedDates[key]) {
-        // If the cell is not yet selected, assign the selected location
-        this.selectedDates[key] = [this.selectedHotelLocation];
+        // First, check if adding to this cell violates the new rule
+        const isAtStartOrEnd = this.isAtStartOrEndOfOtherArea(rowId, date);
+        if (isAtStartOrEnd || !this.anySelectionExists(key)) {
+            // Either at the start/end of an existing area or no conflict, proceed to select
+            this.selectedDates[key] = [this.selectedHotelLocation];
+        } else {
+            // Violates the rule, do not allow selection
+            alert('You can only select the start or end date of an existing selection for a different area.');
+            return;
+        }
     } else {
-        // If the cell is already selected, decide to add or remove the location
         const locationIndex = this.selectedDates[key].indexOf(this.selectedHotelLocation);
         if (locationIndex === -1) {
-            this.selectedDates[key].push(this.selectedHotelLocation);
+            // Check rule before adding a different area to the selection
+            const isAtStartOrEnd = this.isAtStartOrEndOfOtherArea(rowId, date);
+            if (isAtStartOrEnd) {
+                this.selectedDates[key].push(this.selectedHotelLocation);
+            } else {
+                alert('You can only select the start or end date of an existing selection for a different area.');
+                return;
+            }
         } else {
+            // Deselecting an existing selection
             this.selectedDates[key].splice(locationIndex, 1);
             if (this.selectedDates[key].length === 0) {
                 delete this.selectedDates[key];
             }
+            // Check for in-between dates to deselect if necessary
+            this.deselectInBetweenDatesIfNecessary(rowId, this.selectedHotelLocation);
+            this.selectedDates = { ...this.selectedDates };
+            return;
         }
     }
 
-    // Find and adjust existing range, if necessary
     const existingRange = this.findExistingRange(rowId, this.selectedHotelLocation);
     if (existingRange) {
         this.adjustExistingRange(rowId, date, existingRange);
     }
 
-    // Update to maintain reactivity
     this.selectedDates = { ...this.selectedDates };
-
-				console.log(this.selectedDates);
 },
+
+// Helper method to check if there's any selection for the cell
+anySelectionExists(key) {
+    return this.selectedDates[key] && this.selectedDates[key].length > 0;
+},
+
+// Helper method to determine if the selected date is at the start or end of any other area's range
+isAtStartOrEndOfOtherArea(rowId, date) {
+    let atStartOrEnd = false;
+    this.dateRange.forEach((otherDate) => {
+        const otherDateString = this.formatDate(otherDate);
+        const otherKey = `${rowId}-${otherDateString}`;
+        if (this.selectedDates[otherKey] && this.selectedDates[otherKey].length > 0) {
+            const otherAreas = this.selectedDates[otherKey].filter(area => area !== this.selectedHotelLocation);
+            otherAreas.forEach((otherArea) => {
+                const range = this.findExistingRange(rowId, otherArea);
+                if (range) {
+                    const dateIndex = this.dateRange.findIndex(d => this.formatDate(d) === this.formatDate(date));
+                    if (dateIndex === range.start || dateIndex === range.end) {
+                        atStartOrEnd = true;
+                    }
+                }
+            });
+        }
+    });
+    return atStartOrEnd;
+},
+
+
+deselectInBetweenDatesIfNecessary(rowId, area) {
+    this.dateRange.forEach(date => {
+        const dateString = this.formatDate(date);
+        const key = `${rowId}-${dateString}`;
+        if (this.selectedDates[key] && this.selectedDates[key].includes(area)) {
+            this.selectedDates[key] = this.selectedDates[key].filter(location => location !== area);
+            if (this.selectedDates[key].length === 0) {
+                delete this.selectedDates[key];
+            }
+        }
+    });
+},
+
+
+				
+
+				
+
+
 
 
 

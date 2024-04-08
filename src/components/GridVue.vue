@@ -408,34 +408,97 @@ selectCell(rowId, date) {
         return;
     }
 
-    // Handle the scenario of selecting an intersection day
+    // Toggle the selection
     if (!this.selectedDates[key]) {
-        // If the cell is not yet selected, assign the selected location
-        this.selectedDates[key] = [this.selectedHotelLocation];
+        // First, check if adding to this cell violates the new rule
+        const isAtStartOrEnd = this.isAtStartOrEndOfOtherArea(rowId, date);
+        if (isAtStartOrEnd || !this.anySelectionExists(key)) {
+            // Either at the start/end of an existing area or no conflict, proceed to select
+            this.selectedDates[key] = [this.selectedHotelLocation];
+        } else {
+            // Violates the rule, do not allow selection
+            alert('You can only select the start or end date of an existing selection for a different area.');
+            return;
+        }
     } else {
-        // If the cell is already selected, decide to add or remove the location
         const locationIndex = this.selectedDates[key].indexOf(this.selectedHotelLocation);
         if (locationIndex === -1) {
-            this.selectedDates[key].push(this.selectedHotelLocation);
+            // Check rule before adding a different area to the selection
+            const isAtStartOrEnd = this.isAtStartOrEndOfOtherArea(rowId, date);
+            if (isAtStartOrEnd) {
+                this.selectedDates[key].push(this.selectedHotelLocation);
+            } else {
+                alert('You can only select the start or end date of an existing selection for a different area.');
+                return;
+            }
         } else {
+            // Deselecting an existing selection
             this.selectedDates[key].splice(locationIndex, 1);
             if (this.selectedDates[key].length === 0) {
                 delete this.selectedDates[key];
             }
+            // Check for in-between dates to deselect if necessary
+            this.deselectInBetweenDatesIfNecessary(rowId, this.selectedHotelLocation);
+            this.selectedDates = { ...this.selectedDates };
+            return;
         }
     }
 
-    // Find and adjust existing range, if necessary
     const existingRange = this.findExistingRange(rowId, this.selectedHotelLocation);
     if (existingRange) {
         this.adjustExistingRange(rowId, date, existingRange);
     }
 
-    // Update to maintain reactivity
     this.selectedDates = { ...this.selectedDates };
-
-				console.log(this.selectedDates);
 },
+
+// Helper method to check if there's any selection for the cell
+anySelectionExists(key) {
+    return this.selectedDates[key] && this.selectedDates[key].length > 0;
+},
+
+// Helper method to determine if the selected date is at the start or end of any other area's range
+isAtStartOrEndOfOtherArea(rowId, date) {
+    let atStartOrEnd = false;
+    this.dateRange.forEach((otherDate) => {
+        const otherDateString = this.formatDate(otherDate);
+        const otherKey = `${rowId}-${otherDateString}`;
+        if (this.selectedDates[otherKey] && this.selectedDates[otherKey].length > 0) {
+            const otherAreas = this.selectedDates[otherKey].filter(area => area !== this.selectedHotelLocation);
+            otherAreas.forEach((otherArea) => {
+                const range = this.findExistingRange(rowId, otherArea);
+                if (range) {
+                    const dateIndex = this.dateRange.findIndex(d => this.formatDate(d) === this.formatDate(date));
+                    if (dateIndex === range.start || dateIndex === range.end) {
+                        atStartOrEnd = true;
+                    }
+                }
+            });
+        }
+    });
+    return atStartOrEnd;
+},
+
+
+deselectInBetweenDatesIfNecessary(rowId, area) {
+    this.dateRange.forEach(date => {
+        const dateString = this.formatDate(date);
+        const key = `${rowId}-${dateString}`;
+        if (this.selectedDates[key] && this.selectedDates[key].includes(area)) {
+            this.selectedDates[key] = this.selectedDates[key].filter(location => location !== area);
+            if (this.selectedDates[key].length === 0) {
+                delete this.selectedDates[key];
+            }
+        }
+    });
+},
+
+
+				
+
+				
+
+
 
 
 
@@ -883,17 +946,17 @@ input[type="number"] {
 /* Intersection styles */
 .mainMakkah-shiftingMakkah-intersection,
 .shiftingMakkah-mainMakkah-intersection {
-    background: linear-gradient(to right, #ffcccc 50%, #ccccff 50%);
+    background: linear-gradient(to top, #ffcccc 50%, #ccccff 50%);
 }
 
 .mainMakkah-madinah-intersection,
 .madinah-mainMakkah-intersection {
-    background: linear-gradient(to right, #ffcccc 50%, #ccffcc 50%);
+    background: linear-gradient(to top, #ffcccc 50%, #ccffcc 50%);
 }
 
 .shiftingMakkah-madinah-intersection,
 .madinah-shiftingMakkah-intersection {
-    background: linear-gradient(to right, #ccccff 50%, #ccffcc 50%);
+    background: linear-gradient(to top, #ccccff 50%, #ccffcc 50%);
 }
 
 /* Style for the holy period header */
