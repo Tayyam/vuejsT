@@ -1,4 +1,3 @@
-
 <template>
 	<div>
 					<select v-model="selectedHotelLocation">
@@ -12,6 +11,10 @@
 					<br><br>
 					<button @click="clearUnconfirmedRows">Clear Unconfirmed Rows</button>
 					<br><br>
+					<button @click="getCheckedRowsData">Get Checked Data</button>
+					<br><br>
+					<button @click="resetLocalStorage">Reset Local Storage</button>
+					<br><br>
 					<button @click="toggleDisplayMode">
 									{{ displayMode === 'pilgrims' ? 'Show as Rooms' : 'Show as Pilgrims' }}
 					</button>
@@ -23,7 +26,7 @@
 									<!-- Table for Date Headers -->
 									<table class="header-table">
 													<tr>
-																	<th>ID</th>
+																	<th>room</th>
 																	<th v-for="date in dateRange" :key="date" :class="{ 'holy-period': isHolyPeriod(date) }">
             {{ date.getDate() }}/{{ date.getMonth() + 1 }}
         </th>
@@ -44,30 +47,32 @@
 																	<th v-colspan="3">Shifting Room type</th>
 																	<th v-colspan="3">Rooms</th>
 																	<th v-colspan="3">Confirmation</th>
+																	<th v-colspan="3">Check</th>
+																	
 													</tr>
 													<tr v-for="(line, index) in roomLines" :key="index">
 																	<!-- Room Type Dropdowns, Number of Rooms Input, and Confirmation Button -->
 																	<td>
 																					<!-- Main Room Type Dropdown -->
-																					<select v-model="roomSettings[index + 1].mainRoomType">
-																									<option value="double">Double (2 pilgrims)</option>
-																									<option value="triple">Triple (3 pilgrims)</option>
-																									<option value="quadruple">Quadruple (4 pilgrims)</option>
-																					</select>
+																					<select v-model="roomSettings[index + 1].mainRoomType" :disabled="confirmedRows[index + 1]">
+            <option value="double">Double (2 pilgrims)</option>
+            <option value="triple">Triple (3 pilgrims)</option>
+            <option value="quadruple">Quadruple (4 pilgrims)</option>
+        </select>
 																	</td>
 																	<td>
 																					<!-- Shifting Room Type Dropdown -->
-																					<select v-model="roomSettings[index + 1].shiftingRoomType" class="shifting-makkah-select" :id="'shiftingRoomType-' + (index + 1)">
-    <option value="double">Double (2 pilgrims)</option>
-    <option value="triple">Triple (3 pilgrims)</option>
-    <option value="quadruple">Quadruple (4 pilgrims)</option>
-</select>
+																					<select v-model="roomSettings[index + 1].shiftingRoomType" class="shifting-makkah-select" :id="'shiftingRoomType-' + (index + 1)" :disabled="confirmedRows[index + 1]">
+            <option value="double">Double (2 pilgrims)</option>
+            <option value="triple">Triple (3 pilgrims)</option>
+            <option value="quadruple">Quadruple (4 pilgrims)</option>
+        </select>
 
 																	</td>
 																	<td>
 																					<!-- Number of Rooms Input -->
-																					<input type="number" v-model.number="roomSettings[index + 1].numberOfRooms" min="1">
-																	</td>
+																					<input type="number" v-model.number="roomSettings[index + 1].numberOfRooms" min="1" :disabled="confirmedRows[index + 1]">
+    </td>
 																	<td>
 																					<!-- Confirmation Button -->
 																					<button @click="toggleConfirmation(index + 1)"
@@ -80,17 +85,22 @@
 																									{{ confirmedRows[index + 1] ? (hoveredRows[index + 1] ? 'Unconfirm' : 'Confirmed') : 'Confirm' }}
 																					</button>
 																	</td>
+																	<td>
+    <input type="checkbox" 
+           @change="handleCheckboxChange(index + 1, $event)" 
+           :disabled="!confirmedRows[index + 1]">
+</td>
 													</tr>
 									</table>
 									</div>
 					</div>
 
 					<br>
-					<button @click="calculate">Calculate</button>
+					<!-- <button @click="calculate">Calculate</button> -->
 					<h3>Summary:</h3>
 					<table class="summary-table">
       <tr>
-        <th>ID</th>
+        <th>room</th>
         <th>Area</th>
         <th>From</th>
         <th>To</th>
@@ -129,6 +139,7 @@ export default {
 			holyPeriodStart: new Date(2024, 5, 15), // Holy period start date: June 15th, 2024
    holyPeriodEnd: new Date(2024, 5, 19),   // Holy period end date: June 19th, 2024
 			dateRange: [],
+			checkedRows: {},
 	};
 },
 
@@ -141,10 +152,95 @@ watch: {
 
 
 created() {
-			this.initializeDateRange();
-	},
+        this.initializeDateRange();
+        this.loadSummaryData();
+    },
 
 methods: {
+
+	handleCheckboxChange(rowIndex, event) {
+    this.checkedRows[rowIndex] = event.target.checked;
+  },
+
+		getCheckedRowsData() {
+    let combinedData = [];
+
+    // Iterate over each row
+    for (let rowIndex = 1; rowIndex <= this.roomLines.length; rowIndex++) {
+      // Check if the row is checked
+      if (this.checkedRows[rowIndex]) {
+        let rowData = [];
+
+        // Process each selected date for the checked row
+        for (const [key, areas] of Object.entries(this.selectedDates)) {
+          const [currentRowId, dateString] = key.split('-');
+          if (parseInt(currentRowId) === rowIndex) {
+            areas.forEach(area => {
+              const date = this.parseDateFromString(dateString);
+              this.addToRowData(rowData, rowIndex, area, date);
+            });
+          }
+        }
+
+        // Combine the processed row data into a single array
+        if (rowData.length > 0) {
+          combinedData.push(...rowData);
+        }
+      }
+    }
+
+    console.log("Combined Data for Checked Rows:", combinedData);
+  },
+
+	logRowContents(rowIndex) {
+    let rowData = [];
+
+    // Process each selected date for the row
+    for (const [key, areas] of Object.entries(this.selectedDates)) {
+      const [currentRowId, dateString] = key.split('-');
+      if (parseInt(currentRowId) === rowIndex) {
+        areas.forEach(area => {
+          const date = this.parseDateFromString(dateString);
+          this.addToRowData(rowData, rowIndex, area, date);
+        });
+      }
+    }
+
+    // Log the row data in a structured format
+    console.log(rowData);
+  },
+
+  parseDateFromString(dateString) {
+    // Parse the dateString into a Date object
+    const [day, month] = dateString.split('/');
+    return new Date(2024, month - 1, day); // Example year, adjust as necessary
+  },
+
+  addToRowData(rowData, rowId, area, date) {
+    // Find existing entry or create a new one
+    let entry = rowData.find(entry => entry.area === area);
+    if (!entry) {
+      entry = {
+        area: area,
+        from: this.formatDate(date),
+        to: this.formatDate(date),
+        room: rowId.toString(),
+        roomType: this.roomSettings[rowId]?.mainRoomType || 'unknown', // Adjust according to your data structure
+        numberOfRooms: this.roomSettings[rowId]?.numberOfRooms || 1
+      };
+      rowData.push(entry);
+    } else {
+      // Update 'to' date if the new date is later
+      if (date > this.parseDateFromString(entry.to)) {
+        entry.to = this.formatDate(date);
+      }
+    }
+  },
+
+	resetLocalStorage() {
+        localStorage.clear();
+        alert('Local storage has been reset.');
+    },
 
 	checkForAreaDuringHolyPeriod(rowId, area) {
     // Iterate through the holy period dates
@@ -166,6 +262,9 @@ adjustShiftingMakkahRoomType() {
 
         // Check if the number of pilgrims for Shifting Makkah is not an integer multiple of the room capacity
         if (mainMakkahPilgrims % roomCapacity !== 0) {
+            // Alert the user before making changes
+            alert(`Adjusting Shifting Makkah room type for line ${lineId} to match Main Makkah room type due to pilgrim count.`);
+
             // Adjust the Shifting Makkah room type to match the Main Makkah room type
             this.roomSettings[lineId].shiftingRoomType = this.roomSettings[lineId].mainRoomType;
 
@@ -174,6 +273,7 @@ adjustShiftingMakkahRoomType() {
         }
     });
 },
+
 
 
 
@@ -304,12 +404,15 @@ toggleConfirmation(rowId) {
         if (!continuousDates) alertMessages.push("Selected dates are not continuous.");
         if (!isHolyPeriodIncluded) alertMessages.push("Holy period is not fully included.");
         if (hasMadinahDuringHolyPeriod) alertMessages.push("Madinah area is selected during the holy period.");
-    } else {
-        // Toggle confirmation if no issues found
-        this.confirmedRows[rowId] = !this.confirmedRows[rowId];
     }
 
-    if (alertMessages.length) {
+    // Toggle confirmation and calculate summary if no issues found
+    if (alertMessages.length === 0) {
+        this.confirmedRows[rowId] = !this.confirmedRows[rowId];
+        // Call the calculate method to update summary data
+        this.calculate();
+    } else {
+        // Display all collected alert messages
         alert(alertMessages.join("\n"));
     }
 },
@@ -365,10 +468,8 @@ calculateSelectedDaysForAreas(rowId) {
 
 
 isHolyPeriodIncluded(rowId) {
-    const holyPeriodStart = new Date(2024, 5, 15); // Holy period start date (15th June 2024)
-    const holyPeriodEnd = new Date(2024, 5, 19); // Holy period end date (19th June 2024)
-
-    for (let date = new Date(holyPeriodStart); date <= holyPeriodEnd; date.setDate(date.getDate() + 1)) {
+    
+    for (let date = new Date(this.holyPeriodStart); date <= this.holyPeriodEnd; date.setDate(date.getDate() + 1)) {
         const dateString = this.formatDate(date);
         const key = `${rowId}-${dateString}`;
         if (!this.selectedDates[key]) {
@@ -640,63 +741,64 @@ toggleDisplayMode() {
 			getCellText(rowId, date) {
     const dateString = this.formatDate(date);
     const key = `${rowId}-${dateString}`;
-    const locations = this.selectedDates[key]; // This might be an array of locations
+    const locations = this.selectedDates[key] || []; // Fallback to an empty array
 
-    if (locations && locations.length) {
-        let textRepresentation = '-';
+    let textRepresentation = '-'; // Initialize textRepresentation outside the map
 
-        // For handling multiple selections, iterate through each location
-        locations.forEach(location => {
-            const roomSetting = this.roomSettings[rowId];
+    if (locations.length) {
+        textRepresentation = locations.map(location => {
+            const roomSetting = this.roomSettings[rowId] || {
+                mainRoomType: 'quadruple',
+                shiftingRoomType: 'quadruple',
+                numberOfRooms: 1
+            };
 
             if (location === 'shiftingMakkah') {
-                // Special logic for shifting Makkah
                 const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', rowId);
-                const shiftingRoomType = roomSetting.shiftingRoomType || 'quadruple';
+                const shiftingRoomType = roomSetting.shiftingRoomType;
                 const roomCapacity = this.getRoomCapacity(shiftingRoomType);
                 const numberOfRooms = Math.ceil(mainMakkahPilgrims / roomCapacity);
 
-                textRepresentation = this.displayMode === 'rooms' ?
-                    `${numberOfRooms}` : // Added "RM (S)" to denote Shifting Rooms
-                    `${mainMakkahPilgrims}`; // "P" for Pilgrims
+                return this.displayMode === 'rooms' ?
+                    `${numberOfRooms}` : 
+                    `${mainMakkahPilgrims}`; 
             } else {
-                // Logic for mainMakkah or madinah
-                const roomType = location === 'mainMakkah' ? roomSetting.mainRoomType : roomSetting.shiftingRoomType; // Assuming you have a setting for Madinah similar to shiftingRoomType for consistency
+                const roomType = roomSetting.mainRoomType;
                 const roomCapacity = this.getRoomCapacity(roomType);
-                const numberOfRooms = roomSetting.numberOfRooms || 0;
+                const numberOfRooms = roomSetting.numberOfRooms;
                 const pilgrims = roomCapacity * numberOfRooms;
 
-                textRepresentation = this.displayMode === 'rooms' ?
-                    `${numberOfRooms}` : // "RM" for Rooms
-                    `${pilgrims}`; // "P" for Pilgrims
+                return this.displayMode === 'rooms' ?
+                    `${numberOfRooms}` : 
+                    `${pilgrims}`; 
             }
-        });
-
-        return textRepresentation;
+        }).join(', '); // Join the results from map
     }
 
-    return '-';
+    return textRepresentation;
 },
+
+
+
 
 
 
 getCellClass(rowId, date) {
     const dateString = this.formatDate(date);
     const key = `${rowId}-${dateString}`;
-    const locations = this.selectedDates[key];
+    const locations = this.selectedDates[key] || [];
 
-    if (locations && locations.length > 0) {
-        // Handle intersection scenarios
-        if (locations.length > 1) {
-            return locations.join('-') + '-intersection';
-        } else {
-            // Return the class for a single location
-            return locations[0];
-        }
+    if (locations.length > 1) {
+        return locations.join('-') + '-intersection';
+    } else if (locations.length === 1) {
+        return locations[0];
     }
 
     return '';
 },
+
+
+
 
 
 
@@ -726,6 +828,91 @@ calculate() {
     map.forEach((dates, key) => {
         this.processAreaDates(key, dates);
     });
+
+				// After calculating, save the summaryData to local storage
+				this.saveSummaryData();
+},
+
+saveSummaryData() {
+            localStorage.setItem('summaryData', JSON.stringify(this.summaryData));
+        },
+
+								loadSummaryData() {
+  const storedData = localStorage.getItem('summaryData');
+  if (storedData) {
+    this.summaryData = JSON.parse(storedData);
+    this.reconstructStateFromSummary();
+  }
+},
+
+reconstructStateFromSummary() {
+    // Reset existing state
+    this.roomLines = [];
+    this.selectedDates = {};
+    this.roomSettings = {};
+    this.confirmedRows = {};
+
+    // Sort summaryData by the room ID to ensure consistent ordering
+    this.summaryData.sort((a, b) => parseInt(a.room) - parseInt(b.room));
+
+    this.summaryData.forEach(summary => {
+        const lineIndex = parseInt(summary.room) - 1;
+       // Retain the original capitalization and handle spaces in area names
+        const area = summary.area === 'Shifting Makkah' ? 'shiftingMakkah' : summary.area;
+
+        // Initialize roomLines and roomSettings if they don't exist
+        if (!this.roomLines[lineIndex]) {
+            this.roomLines[lineIndex] = null;
+        }
+        if (!this.roomSettings[lineIndex + 1]) {
+            this.roomSettings[lineIndex + 1] = {
+                mainRoomType: summary.roomType,
+                shiftingRoomType: summary.roomType, // Assuming the same room type for shifting
+                numberOfRooms: summary.numberOfRooms
+            };
+        } else {
+            // Update roomSettings if they exist
+            this.roomSettings[lineIndex + 1].mainRoomType = summary.roomType;
+            this.roomSettings[lineIndex + 1].shiftingRoomType = summary.roomType;
+            this.roomSettings[lineIndex + 1].numberOfRooms = summary.numberOfRooms;
+        }
+
+        // Confirm the row
+        this.confirmedRows[lineIndex + 1] = true;
+
+        // Populate selectedDates for the range
+        let current = new Date(2024, parseInt(summary.from.split('/')[1]) - 1, parseInt(summary.from.split('/')[0]));
+        const end = new Date(2024, parseInt(summary.to.split('/')[1]) - 1, parseInt(summary.to.split('/')[0]));
+        while (current <= end) {
+            const key = `${lineIndex + 1}-${this.formatDate(current)}`;
+            if (!this.selectedDates[key]) {
+                this.selectedDates[key] = [area];
+            } else if (!this.selectedDates[key].includes(area)) {
+                this.selectedDates[key].push(area);
+            }
+            current.setDate(current.getDate() + 1);
+        }
+    });
+
+    // Force a UI update
+    this.selectedDates = { ...this.selectedDates };
+    this.roomSettings = { ...this.roomSettings };
+    this.confirmedRows = { ...this.confirmedRows };
+},
+
+
+
+
+
+// Helper method to get all dates in a range
+getDatesInRange(startDate, endDate) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const dates = [];
+  for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 1)) {
+    dates.push(new Date(dt));
+  }
+  return dates;
 },
 
 
@@ -744,7 +931,6 @@ processAreaDates(mapKey, dates) {
         const pilgrims = this.getRoomCapacity(roomType) * numberOfRooms;
 
         this.summaryData.push({
-            id: this.summaryData.length + 1,
             area,
             from: formattedStartDate,
             to: formattedEndDate,
@@ -767,7 +953,6 @@ processAreaDates(mapKey, dates) {
         const numberOfRooms = Math.ceil(mainMakkahPilgrims / this.getRoomCapacity(shiftingRoomType));
 
         this.summaryData.push({
-            id: this.summaryData.length + 1,
             area: 'Shifting Makkah',
             from: formattedStartDate,
             to: formattedEndDate,
@@ -795,7 +980,6 @@ pushSummaryData(area, rowId, dates) {
 			const pilgrims = this.getRoomCapacity(roomType) * numberOfRooms;
 
 			this.summaryData.push({
-					id: this.summaryData.length + 1,
 					area,
 					from: formattedStartDate,
 					to: formattedEndDate,
@@ -818,7 +1002,7 @@ pushSummaryData(area, rowId, dates) {
 			const numberOfRooms = Math.ceil(mainMakkahPilgrims / this.getRoomCapacity(shiftingRoomType));
 
 			this.summaryData.push({
-					id: this.summaryData.length + 1,
+
 					area: 'Shifting Makkah',
 					from: formattedStartDate,
 					to: formattedEndDate,
@@ -976,17 +1160,17 @@ input[type="number"] {
 /* Intersection styles */
 .mainMakkah-shiftingMakkah-intersection,
 .shiftingMakkah-mainMakkah-intersection {
-    background: linear-gradient(to top, #ffcccc 50%, #ccccff 50%);
+    background: linear-gradient(to bottom, #ffcccc 50%, #ccccff 50%);
 }
 
 .mainMakkah-madinah-intersection,
 .madinah-mainMakkah-intersection {
-    background: linear-gradient(to top, #ffcccc 50%, #ccffcc 50%);
+    background: linear-gradient(to bottom, #ffcccc 50%, #ccffcc 50%);
 }
 
 .shiftingMakkah-madinah-intersection,
 .madinah-shiftingMakkah-intersection {
-    background: linear-gradient(to top, #ccccff 50%, #ccffcc 50%);
+    background: linear-gradient(to bottom, #ccccff 50%, #ccffcc 50%);
 }
 
 /* Style for the holy period header */
