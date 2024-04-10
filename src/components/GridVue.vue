@@ -25,7 +25,7 @@
 
 					<!-- Container for the two tables -->
 					<div class="table-container">
-						<div class="header-table-container">
+						<div class="header-table-container" ref="headerTableContainer">
 									<!-- Table for Date Headers -->
 									<table class="header-table">
 													<tr>
@@ -170,6 +170,10 @@ export default {
     },
     },
 
+    mounted() {
+        this.enableHeaderTableDragScroll(); // Initialize the drag-to-scroll
+    },
+
     created() {
         this.initializeDateRange();
         this.loadSummaryData();
@@ -188,6 +192,32 @@ export default {
     },
 
     methods: {
+
+        enableHeaderTableDragScroll() {
+            const headerTableContainer = this.$refs.headerTableContainer; // Adjust based on your actual ref
+            let isDragging = false;
+            let startScrollPos = 0;
+            let startX = 0;
+
+            headerTableContainer.addEventListener('mousedown', function(e) {
+                isDragging = true;
+                startX = e.pageX;
+                startScrollPos = headerTableContainer.scrollLeft; // Horizontal scroll
+                headerTableContainer.style.cursor = 'grabbing';
+                e.preventDefault(); // Prevent text selection
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (!isDragging) return;
+                const dx = e.pageX - startX;
+                headerTableContainer.scrollLeft = startScrollPos - dx;
+            });
+
+            document.addEventListener('mouseup', function() {
+                isDragging = false;
+                headerTableContainer.style.cursor = '';
+            });
+        },
 
        
 
