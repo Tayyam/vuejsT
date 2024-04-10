@@ -200,22 +200,13 @@ export default {
         alert("The selected row is empty and cannot be copied.");
         return;
     }
-    const targetIndex = this.findAvailableRow();
-    
-    if (targetIndex > this.roomLines.length) {
-        this.roomLines.push(null); // Add new row if needed
-    }
-    this.roomSettings[targetIndex] = {...roomSettingsToCopy};
-    this.copySelectedDates(rowIndex, targetIndex);
-    this.confirmedRows[targetIndex] = false;
+    // Always add a new line when copying
+    const newLineIndex = this.roomLines.push(null) - 1;
+    this.roomSettings[newLineIndex + 1] = { ...roomSettingsToCopy };
+    this.copySelectedDates(rowIndex, newLineIndex + 1);
+    this.confirmedRows[newLineIndex + 1] = false;
 },
-findAvailableRow() {
-    const unconfirmedRowIndex = this.roomLines.findIndex((line, index) => !this.confirmedRows[index + 1]);
-    if (unconfirmedRowIndex !== -1) {
-        return unconfirmedRowIndex + 1;
-    }
-    return this.roomLines.length + 1; // Return next index after the last row
-},
+
 copySelectedDates(originalRowId, newRowId) {
     this.dateRange.forEach(date => {
         const dateString = this.formatDate(date);
@@ -226,6 +217,7 @@ copySelectedDates(originalRowId, newRowId) {
         }
     });
 },
+
 
         handleCheckboxChange(rowIndex, event) {
             this.checkedRows[rowIndex] = event.target.checked;
