@@ -252,24 +252,35 @@ export default {
 
 ensureMinimumRoomLines() {
     const confirmedRowsCount = Object.keys(this.confirmedRows).filter(key => this.confirmedRows[key]).length;
-    const minimumAllowedRoomLines = Math.max(confirmedRowsCount, 10); 
+    const minimumAllowedRoomLines = Math.max(confirmedRowsCount, 10);
     this.desiredRoomLines = Math.max(this.desiredRoomLines, minimumAllowedRoomLines);
 
-    // Adjust roomLines array size
+    // Adjust roomLines array size without resetting room settings
     const currentRoomLines = this.roomLines.length;
     if (currentRoomLines < this.desiredRoomLines) {
+        // Add more room lines if needed
         const additionalLines = this.desiredRoomLines - currentRoomLines;
         for (let i = 0; i < additionalLines; i++) {
-            this.addRoomLine();
+            this.addRoomLine(); // This method should ensure the new lines have default settings
         }
     } else if (currentRoomLines > this.desiredRoomLines) {
+        // Remove excess room lines without affecting the room settings of remaining lines
         const removeCount = currentRoomLines - this.desiredRoomLines;
         this.roomLines.splice(-removeCount, removeCount);
+        // Optionally: Clean up roomSettings and confirmedRows for removed lines
+        Object.keys(this.roomSettings).forEach(key => {
+    if (parseInt(key) > this.desiredRoomLines) {
+        delete this.roomSettings[key]; // Using delete operator
+        delete this.confirmedRows[key];
+    }
+});
     }
 
-    // Update localStorage with the new desiredRoomLines
+    // Persist changes to localStorage
     localStorage.setItem('desiredRoomLines', this.desiredRoomLines.toString());
+    localStorage.setItem('roomSettings', JSON.stringify(this.roomSettings));
 },
+
 
 
 
