@@ -8,8 +8,7 @@
 					</select>
 					<br><br>
 					<label for="desiredRoomLines">Desired Room Lines:</label>
-                    <input id="desiredRoomLines" type="number" v-model.number="desiredRoomLines" :min="minDesiredRoomLines" :max="250" step="1" @keydown.prevent="" @input="ensureMinimumRoomLines">
-
+<input id="desiredRoomLines" type="number" v-model.number="desiredRoomLines" :min="10" :max="250" @input="ensureMinimumRoomLines">
 
 					<br><br>
 					<button @click="clearUnconfirmedRows">Clear Unconfirmed Rows</button>
@@ -25,7 +24,7 @@
 
 					<!-- Container for the two tables -->
 					<div class="table-container">
-						<div class="header-table-container" ref="headerTableContainer">
+						<div class="header-table-container">
 									<!-- Table for Date Headers -->
 									<table class="header-table">
 													<tr>
@@ -159,25 +158,9 @@ export default {
 
     watch: {
         roomSettings: {
-            handler() {
-                // Adjust the Shifting Makkah room type as needed before saving
-                this.adjustShiftingMakkahRoomType();
-
-                // Save the (possibly updated) roomSettings to localStorage
-                localStorage.setItem('roomSettings', JSON.stringify(this.roomSettings));
-            },
-            deep: true // Watch deeply for nested changes
-        },
-         minDesiredRoomLines(newVal) {
-        if (this.desiredRoomLines < newVal) {
-            this.desiredRoomLines = newVal;
-            localStorage.setItem('desiredRoomLines', this.desiredRoomLines.toString());
+            handler: 'adjustShiftingMakkahRoomType',
+            deep: true
         }
-    },
-    },
-
-    mounted() {
-        this.enableHeaderTableDragScroll(); // Initialize the drag-to-scroll
     },
 
     created() {
@@ -189,59 +172,18 @@ export default {
     computed: {
         maxAllowedRoomLines() {
             const confirmedRowsCount = Object.keys(this.confirmedRows).filter(key => this.confirmedRows[key]).length;
-            return Math.max(confirmedRowsCount, this.desiredRoomLines, Math.min(10, 250)); // Ensures the count is between the number of confirmed rows and 250
+            return Math.max(confirmedRowsCount, this.desiredRoomLines, Math.min(this.desiredRoomLines, 250)); // Ensures the count is between the number of confirmed rows and 250
         },
-        minDesiredRoomLines() {
-        const confirmedRowsCount = Object.keys(this.confirmedRows).filter(key => this.confirmedRows[key]).length;
-        return Math.max(confirmedRowsCount, 10); // Ensure at least 10 or the number of confirmed rows
-    },
     },
 
     methods: {
 
-        enableHeaderTableDragScroll() {
-            const headerTableContainer = this.$refs.headerTableContainer; // Adjust based on your actual ref
-            let isDragging = false;
-            let startScrollPos = 0;
-            let startX = 0;
-
-            headerTableContainer.addEventListener('mousedown', function(e) {
-                isDragging = true;
-                startX = e.pageX;
-                startScrollPos = headerTableContainer.scrollLeft; // Horizontal scroll
-                headerTableContainer.style.cursor = 'grabbing';
-                e.preventDefault(); // Prevent text selection
-            });
-
-            document.addEventListener('mousemove', function(e) {
-                if (!isDragging) return;
-                const dx = e.pageX - startX;
-                headerTableContainer.scrollLeft = startScrollPos - dx;
-            });
-
-            document.addEventListener('mouseup', function() {
-                isDragging = false;
-                headerTableContainer.style.cursor = '';
-            });
-        },
-
-       
-
         initializeDesiredRoomLinesFromStorage() {
     const storedRoomLines = parseInt(localStorage.getItem('desiredRoomLines'), 10);
-    const storedRoomSettings = JSON.parse(localStorage.getItem('roomSettings'));
-
     if (!isNaN(storedRoomLines) && storedRoomLines >= 10 && storedRoomLines <= 250) {
         this.desiredRoomLines = storedRoomLines;
         this.roomLines = Array(storedRoomLines).fill(null);
-        
-        // Check if storedRoomSettings exists and has entries corresponding to the number of storedRoomLines
-        if (storedRoomSettings && Object.keys(storedRoomSettings).length === storedRoomLines) {
-            this.roomSettings = storedRoomSettings;
-        } else {
-            // Initialize room settings if there's a mismatch or if stored settings are not found
-            this.roomSettings = this.initializeRoomSettings(storedRoomLines);
-        }
+        this.roomSettings = this.initializeRoomSettings(storedRoomLines);
     } else {
         this.desiredRoomLines = 10; // Default value if not in local storage
         this.ensureMinimumRoomLines();
@@ -249,28 +191,23 @@ export default {
 },
 
 
-
-ensureMinimumRoomLines() {
-    const confirmedRowsCount = Object.keys(this.confirmedRows).filter(key => this.confirmedRows[key]).length;
-    const minimumAllowedRoomLines = Math.max(confirmedRowsCount, 10); // Ensure at least 10 or number of confirmed rows
-    this.desiredRoomLines = Math.max(this.desiredRoomLines, minimumAllowedRoomLines);
-
-    // Adjust roomLines array size
+    ensureMinimumRoomLines() {
     const currentRoomLines = this.roomLines.length;
-    if (currentRoomLines < this.desiredRoomLines) {
-        const additionalLines = this.desiredRoomLines - currentRoomLines;
+    const minimumRoomLines = this.desiredRoomLines;
+
+    if (currentRoomLines < minimumRoomLines) {
+        const additionalLines = minimumRoomLines - currentRoomLines;
         for (let i = 0; i < additionalLines; i++) {
             this.addRoomLine();
         }
-    } else if (currentRoomLines > this.desiredRoomLines) {
-        const removeCount = currentRoomLines - this.desiredRoomLines;
+    } else if (currentRoomLines > minimumRoomLines) {
+        const removeCount = currentRoomLines - minimumRoomLines;
         this.roomLines.splice(-removeCount, removeCount);
     }
 
-    // Update localStorage with the new desiredRoomLines
+    // Store the current desiredRoomLines in local storage
     localStorage.setItem('desiredRoomLines', this.desiredRoomLines.toString());
 },
-
 
 
         handleCopy(rowIndex) {
@@ -393,13 +330,9 @@ copySelectedDates(originalRowId, newRowId) {
         },
 
         resetLocalStorage() {
-    localStorage.clear();
-    this.desiredRoomLines = 10;
-    this.roomLines = Array(this.desiredRoomLines).fill(null);
-    this.roomSettings = this.initializeRoomSettings(this.desiredRoomLines);
-    alert('Local storage has been reset.');
-},
-
+            localStorage.clear();
+            alert('Local storage has been reset.');
+        },
 
         checkForAreaDuringHolyPeriod(rowId, area) {
             // Iterate through the holy period dates
