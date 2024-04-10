@@ -7,7 +7,9 @@
 									<option value="madinah">Madinah</option>
 					</select>
 					<br><br>
-					<button @click="addRoomLine">Add Room Line</button>
+					<label for="desiredRoomLines">Desired Room Lines:</label>
+<input id="desiredRoomLines" type="number" v-model.number="desiredRoomLines" :min="10" :max="250" @input="ensureMinimumRoomLines">
+
 					<br><br>
 					<button @click="clearUnconfirmedRows">Clear Unconfirmed Rows</button>
 					<br><br>
@@ -48,6 +50,7 @@
 																	<th v-colspan="3">Rooms</th>
 																	<th v-colspan="3">Confirmation</th>
 																	<th v-colspan="3">Check</th>
+                                                                    <th v-colspan="3">Copy</th>
 																	
 													</tr>
 													<tr v-for="(line, index) in roomLines" :key="index">
@@ -90,6 +93,13 @@
            @change="handleCheckboxChange(index + 1, $event)" 
            :disabled="!confirmedRows[index + 1]">
 </td>
+<td>
+                    <!-- Copy Row Button -->
+                    <button @click="handleCopy(index + 1)" 
+        :disabled="!confirmedRows[index + 1]">
+    Copy
+</button>
+                </td>
 													</tr>
 									</table>
 									</div>
@@ -122,12 +132,15 @@
 </template>
 
 <script>
+
+
 export default {
     name: 'HotelBooking',
     data() {
         return {
             selectedHotelLocation: '',
-            roomLines: Array(10).fill(null),
+            desiredRoomLines: 10,
+            roomLines: Array(this.desiredRoomLines).fill(null),
             selectedDates: {},
             roomSettings: this.initializeRoomSettings(10),
             summaryData: [],
@@ -153,9 +166,89 @@ export default {
     created() {
         this.initializeDateRange();
         this.loadSummaryData();
+        this.initializeDesiredRoomLinesFromStorage();
+    },
+
+    computed: {
+        maxAllowedRoomLines() {
+            const confirmedRowsCount = Object.keys(this.confirmedRows).filter(key => this.confirmedRows[key]).length;
+            return Math.max(confirmedRowsCount, this.desiredRoomLines, Math.min(this.desiredRoomLines, 250)); // Ensures the count is between the number of confirmed rows and 250
+        },
     },
 
     methods: {
+
+        initializeDesiredRoomLinesFromStorage() {
+    const storedRoomLines = parseInt(localStorage.getItem('desiredRoomLines'), 10);
+    if (!isNaN(storedRoomLines) && storedRoomLines >= 10 && storedRoomLines <= 250) {
+        this.desiredRoomLines = storedRoomLines;
+        this.roomLines = Array(storedRoomLines).fill(null);
+        this.roomSettings = this.initializeRoomSettings(storedRoomLines);
+    } else {
+        this.desiredRoomLines = 10; // Default value if not in local storage
+        this.ensureMinimumRoomLines();
+    }
+},
+
+
+    ensureMinimumRoomLines() {
+    const currentRoomLines = this.roomLines.length;
+    const minimumRoomLines = this.desiredRoomLines;
+
+    if (currentRoomLines < minimumRoomLines) {
+        const additionalLines = minimumRoomLines - currentRoomLines;
+        for (let i = 0; i < additionalLines; i++) {
+            this.addRoomLine();
+        }
+    } else if (currentRoomLines > minimumRoomLines) {
+        const removeCount = currentRoomLines - minimumRoomLines;
+        this.roomLines.splice(-removeCount, removeCount);
+    }
+
+    // Store the current desiredRoomLines in local storage
+    localStorage.setItem('desiredRoomLines', this.desiredRoomLines.toString());
+},
+
+
+        handleCopy(rowIndex) {
+    const roomSettingsToCopy = this.roomSettings[rowIndex];
+    if (!roomSettingsToCopy) {
+        alert("The selected row is empty and cannot be copied.");
+        return;
+    }
+
+    const targetIndex = this.findAvailableRow();
+    
+    if (targetIndex > this.roomLines.length) {
+        this.roomLines.push(null); // Add new row if needed
+    }
+
+    this.roomSettings[targetIndex] = {...roomSettingsToCopy};
+    this.copySelectedDates(rowIndex, targetIndex);
+    this.confirmedRows[targetIndex] = false;
+},
+
+findAvailableRow() {
+    const unconfirmedRowIndex = this.roomLines.findIndex((line, index) => !this.confirmedRows[index + 1]);
+    if (unconfirmedRowIndex !== -1) {
+        return unconfirmedRowIndex + 1;
+    }
+
+    return this.roomLines.length + 1; // Return next index after the last row
+},
+
+copySelectedDates(originalRowId, newRowId) {
+    this.dateRange.forEach(date => {
+        const dateString = this.formatDate(date);
+        const originalKey = `${originalRowId}-${dateString}`;
+        const newKey = `${newRowId}-${dateString}`;
+
+        if (this.selectedDates[originalKey]) {
+            this.selectedDates[newKey] = [...this.selectedDates[originalKey]];
+        }
+    });
+},
+
 
         handleCheckboxChange(rowIndex, event) {
             this.checkedRows[rowIndex] = event.target.checked;
