@@ -7,10 +7,7 @@
 									<option value="madinah">Madinah</option>
 					</select>
 					<br><br>
-					<label for="desiredRoomLines">Desired Room Lines:</label>
-                    <input id="desiredRoomLines" type="number" v-model.number="desiredRoomLines" :min="minDesiredRoomLines" :max="250" step="1" @keydown.prevent="" @input="ensureMinimumRoomLines">
-
-
+					<button @click="addRoomLine">Add Room Line</button>
 					<br><br>
 					<button @click="clearUnconfirmedRows">Clear Unconfirmed Rows</button>
 					<br><br>
@@ -52,6 +49,7 @@
 																	<th v-colspan="3">Confirmation</th>
 																	<th v-colspan="3">Check</th>
                                                                     <th v-colspan="3">Copy</th>
+
 																	
 													</tr>
 													<tr v-for="(line, index) in roomLines" :key="index">
@@ -133,15 +131,12 @@
 </template>
 
 <script>
-
-
 export default {
     name: 'HotelBooking',
     data() {
         return {
             selectedHotelLocation: '',
-            desiredRoomLines: 10,
-            roomLines: Array(this.desiredRoomLines).fill(null),
+            roomLines: Array(10).fill(null),
             selectedDates: {},
             roomSettings: this.initializeRoomSettings(10),
             summaryData: [],
@@ -159,42 +154,18 @@ export default {
 
     watch: {
         roomSettings: {
-            handler() {
-                // Adjust the Shifting Makkah room type as needed before saving
-                this.adjustShiftingMakkahRoomType();
-
-                // Save the (possibly updated) roomSettings to localStorage
-                localStorage.setItem('roomSettings', JSON.stringify(this.roomSettings));
-            },
-            deep: true // Watch deeply for nested changes
-        },
-         minDesiredRoomLines(newVal) {
-        if (this.desiredRoomLines < newVal) {
-            this.desiredRoomLines = newVal;
-            localStorage.setItem('desiredRoomLines', this.desiredRoomLines.toString());
+            handler: 'adjustShiftingMakkahRoomType',
+            deep: true
         }
-    },
-    },
-
-    mounted() {
-        this.enableHeaderTableDragScroll(); // Initialize the drag-to-scroll
     },
 
     created() {
         this.initializeDateRange();
         this.loadSummaryData();
-        this.initializeDesiredRoomLinesFromStorage();
     },
 
-    computed: {
-        maxAllowedRoomLines() {
-            const confirmedRowsCount = Object.keys(this.confirmedRows).filter(key => this.confirmedRows[key]).length;
-            return Math.max(confirmedRowsCount, this.desiredRoomLines, Math.min(10, 250)); // Ensures the count is between the number of confirmed rows and 250
-        },
-        minDesiredRoomLines() {
-        const confirmedRowsCount = Object.keys(this.confirmedRows).filter(key => this.confirmedRows[key]).length;
-        return Math.max(confirmedRowsCount, 10); // Ensure at least 10 or the number of confirmed rows
-    },
+    mounted() {
+        this.enableHeaderTableDragScroll(); // Initialize the drag-to-scroll
     },
 
     methods: {
@@ -204,7 +175,6 @@ export default {
             let isDragging = false;
             let startScrollPos = 0;
             let startX = 0;
-
             headerTableContainer.addEventListener('mousedown', function(e) {
                 isDragging = true;
                 startX = e.pageX;
@@ -212,76 +182,16 @@ export default {
                 headerTableContainer.style.cursor = 'grabbing';
                 e.preventDefault(); // Prevent text selection
             });
-
             document.addEventListener('mousemove', function(e) {
                 if (!isDragging) return;
                 const dx = e.pageX - startX;
                 headerTableContainer.scrollLeft = startScrollPos - dx;
             });
-
             document.addEventListener('mouseup', function() {
                 isDragging = false;
                 headerTableContainer.style.cursor = '';
             });
         },
-
-       
-
-        initializeDesiredRoomLinesFromStorage() {
-    const storedRoomLines = parseInt(localStorage.getItem('desiredRoomLines'), 10);
-    const storedRoomSettings = JSON.parse(localStorage.getItem('roomSettings'));
-
-    if (!isNaN(storedRoomLines) && storedRoomLines >= 10 && storedRoomLines <= 250) {
-        this.desiredRoomLines = storedRoomLines;
-        this.roomLines = Array(storedRoomLines).fill(null);
-        
-        // Check if storedRoomSettings exists and has entries corresponding to the number of storedRoomLines
-        if (storedRoomSettings && Object.keys(storedRoomSettings).length === storedRoomLines) {
-            this.roomSettings = storedRoomSettings;
-        } else {
-            // Initialize room settings if there's a mismatch or if stored settings are not found
-            this.roomSettings = this.initializeRoomSettings(storedRoomLines);
-        }
-    } else {
-        this.desiredRoomLines = 10; // Default value if not in local storage
-        this.ensureMinimumRoomLines();
-    }
-},
-
-
-
-ensureMinimumRoomLines() {
-    const confirmedRowsCount = Object.keys(this.confirmedRows).filter(key => this.confirmedRows[key]).length;
-    const minimumAllowedRoomLines = Math.max(confirmedRowsCount, 10);
-    this.desiredRoomLines = Math.max(this.desiredRoomLines, minimumAllowedRoomLines);
-
-    // Adjust roomLines array size without resetting room settings
-    const currentRoomLines = this.roomLines.length;
-    if (currentRoomLines < this.desiredRoomLines) {
-        // Add more room lines if needed
-        const additionalLines = this.desiredRoomLines - currentRoomLines;
-        for (let i = 0; i < additionalLines; i++) {
-            this.addRoomLine(); // This method should ensure the new lines have default settings
-        }
-    } else if (currentRoomLines > this.desiredRoomLines) {
-        // Remove excess room lines without affecting the room settings of remaining lines
-        const removeCount = currentRoomLines - this.desiredRoomLines;
-        this.roomLines.splice(-removeCount, removeCount);
-        // Optionally: Clean up roomSettings and confirmedRows for removed lines
-        Object.keys(this.roomSettings).forEach(key => {
-    if (parseInt(key) > this.desiredRoomLines) {
-        delete this.roomSettings[key]; // Using delete operator
-        delete this.confirmedRows[key];
-    }
-});
-    }
-
-    // Persist changes to localStorage
-    localStorage.setItem('desiredRoomLines', this.desiredRoomLines.toString());
-    localStorage.setItem('roomSettings', JSON.stringify(this.roomSettings));
-},
-
-
 
 
         handleCopy(rowIndex) {
@@ -290,39 +200,32 @@ ensureMinimumRoomLines() {
         alert("The selected row is empty and cannot be copied.");
         return;
     }
-
     const targetIndex = this.findAvailableRow();
     
     if (targetIndex > this.roomLines.length) {
         this.roomLines.push(null); // Add new row if needed
     }
-
     this.roomSettings[targetIndex] = {...roomSettingsToCopy};
     this.copySelectedDates(rowIndex, targetIndex);
     this.confirmedRows[targetIndex] = false;
 },
-
 findAvailableRow() {
     const unconfirmedRowIndex = this.roomLines.findIndex((line, index) => !this.confirmedRows[index + 1]);
     if (unconfirmedRowIndex !== -1) {
         return unconfirmedRowIndex + 1;
     }
-
     return this.roomLines.length + 1; // Return next index after the last row
 },
-
 copySelectedDates(originalRowId, newRowId) {
     this.dateRange.forEach(date => {
         const dateString = this.formatDate(date);
         const originalKey = `${originalRowId}-${dateString}`;
         const newKey = `${newRowId}-${dateString}`;
-
         if (this.selectedDates[originalKey]) {
             this.selectedDates[newKey] = [...this.selectedDates[originalKey]];
         }
     });
 },
-
 
         handleCheckboxChange(rowIndex, event) {
             this.checkedRows[rowIndex] = event.target.checked;
@@ -404,13 +307,9 @@ copySelectedDates(originalRowId, newRowId) {
         },
 
         resetLocalStorage() {
-    localStorage.clear();
-    this.desiredRoomLines = 10;
-    this.roomLines = Array(this.desiredRoomLines).fill(null);
-    this.roomSettings = this.initializeRoomSettings(this.desiredRoomLines);
-    alert('Local storage has been reset.');
-},
-
+            localStorage.clear();
+            alert('Local storage has been reset.');
+        },
 
         checkForAreaDuringHolyPeriod(rowId, area) {
             // Iterate through the holy period dates
