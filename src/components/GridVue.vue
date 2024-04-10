@@ -8,7 +8,8 @@
 					</select>
 					<br><br>
 					<label for="desiredRoomLines">Desired Room Lines:</label>
-<input id="desiredRoomLines" type="number" v-model.number="desiredRoomLines" :min="10" :max="250" @input="ensureMinimumRoomLines">
+                    <input id="desiredRoomLines" type="number" v-model.number="desiredRoomLines" :min="minDesiredRoomLines" :max="250" step="1" @keydown.prevent="" @input="ensureMinimumRoomLines">
+
 
 					<br><br>
 					<button @click="clearUnconfirmedRows">Clear Unconfirmed Rows</button>
@@ -160,7 +161,13 @@ export default {
         roomSettings: {
             handler: 'adjustShiftingMakkahRoomType',
             deep: true
+        },
+         minDesiredRoomLines(newVal) {
+        if (this.desiredRoomLines < newVal) {
+            this.desiredRoomLines = newVal;
+            localStorage.setItem('desiredRoomLines', this.desiredRoomLines.toString());
         }
+    },
     },
 
     created() {
@@ -172,11 +179,17 @@ export default {
     computed: {
         maxAllowedRoomLines() {
             const confirmedRowsCount = Object.keys(this.confirmedRows).filter(key => this.confirmedRows[key]).length;
-            return Math.max(confirmedRowsCount, this.desiredRoomLines, Math.min(this.desiredRoomLines, 250)); // Ensures the count is between the number of confirmed rows and 250
+            return Math.max(confirmedRowsCount, this.desiredRoomLines, Math.min(10, 250)); // Ensures the count is between the number of confirmed rows and 250
         },
+        minDesiredRoomLines() {
+        const confirmedRowsCount = Object.keys(this.confirmedRows).filter(key => this.confirmedRows[key]).length;
+        return Math.max(confirmedRowsCount, 10); // Ensure at least 10 or the number of confirmed rows
+    },
     },
 
     methods: {
+
+       
 
         initializeDesiredRoomLinesFromStorage() {
     const storedRoomLines = parseInt(localStorage.getItem('desiredRoomLines'), 10);
@@ -191,23 +204,27 @@ export default {
 },
 
 
-    ensureMinimumRoomLines() {
-    const currentRoomLines = this.roomLines.length;
-    const minimumRoomLines = this.desiredRoomLines;
+ensureMinimumRoomLines() {
+    const confirmedRowsCount = Object.keys(this.confirmedRows).filter(key => this.confirmedRows[key]).length;
+    const minimumAllowedRoomLines = Math.max(confirmedRowsCount, 10); // Ensure at least 10 or number of confirmed rows
+    this.desiredRoomLines = Math.max(this.desiredRoomLines, minimumAllowedRoomLines);
 
-    if (currentRoomLines < minimumRoomLines) {
-        const additionalLines = minimumRoomLines - currentRoomLines;
+    // Adjust roomLines array size
+    const currentRoomLines = this.roomLines.length;
+    if (currentRoomLines < this.desiredRoomLines) {
+        const additionalLines = this.desiredRoomLines - currentRoomLines;
         for (let i = 0; i < additionalLines; i++) {
             this.addRoomLine();
         }
-    } else if (currentRoomLines > minimumRoomLines) {
-        const removeCount = currentRoomLines - minimumRoomLines;
+    } else if (currentRoomLines > this.desiredRoomLines) {
+        const removeCount = currentRoomLines - this.desiredRoomLines;
         this.roomLines.splice(-removeCount, removeCount);
     }
 
-    // Store the current desiredRoomLines in local storage
+    // Update localStorage with the new desiredRoomLines
     localStorage.setItem('desiredRoomLines', this.desiredRoomLines.toString());
 },
+
 
 
         handleCopy(rowIndex) {
