@@ -252,7 +252,7 @@ export default {
 
 ensureMinimumRoomLines() {
     const confirmedRowsCount = Object.keys(this.confirmedRows).filter(key => this.confirmedRows[key]).length;
-    const minimumAllowedRoomLines = Math.max(confirmedRowsCount, this.this.desiredRoomLines + 1); 
+    const minimumAllowedRoomLines = Math.max(confirmedRowsCount, 10); 
     this.desiredRoomLines = Math.max(this.desiredRoomLines, minimumAllowedRoomLines);
 
     // Adjust roomLines array size
