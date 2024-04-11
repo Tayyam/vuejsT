@@ -153,7 +153,10 @@ export default {
     },
 
     watch: {
-        
+        roomSettings: {
+            handler: 'adjustShiftingMakkahRoomType',
+            deep: true
+        }
     },
 
     created() {
@@ -313,7 +316,24 @@ copySelectedDates(originalRowId, newRowId) {
             return false; // Area is not selected during the holy period
         },
 
-       
+        adjustShiftingMakkahRoomType() {
+            Object.entries(this.roomSettings).forEach(([lineId, settings]) => {
+                const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', parseInt(lineId));
+                const roomCapacity = this.getRoomCapacity(settings.shiftingRoomType);
+
+                // Check if the number of pilgrims for Shifting Makkah is not an integer multiple of the room capacity
+                if (mainMakkahPilgrims % roomCapacity !== 0) {
+                    // Alert the user before making changes
+                    alert(`Adjusting Shifting Makkah room type for line ${lineId} to match Main Makkah room type due to pilgrim count.`);
+
+                    // Adjust the Shifting Makkah room type to match the Main Makkah room type
+                    this.roomSettings[lineId].shiftingRoomType = this.roomSettings[lineId].mainRoomType;
+
+                    // Change the input selection immediately
+                    document.getElementById(`shiftingRoomType-${lineId}`).value = this.roomSettings[lineId].shiftingRoomType;
+                }
+            });
+        },
 
         isHolyPeriod(date) {
             return date >= this.holyPeriodStart && date <= this.holyPeriodEnd;
@@ -935,6 +955,7 @@ copySelectedDates(originalRowId, newRowId) {
 
 
 
+
         // Helper method to get all dates in a range
         getDatesInRange(startDate, endDate) {
             const start = new Date(startDate);
@@ -971,102 +992,88 @@ copySelectedDates(originalRowId, newRowId) {
             pilgrims
         });
     } else if (area === 'shiftingMakkah') {
-    const shiftingRoomType = this.roomSettings[rowId]?.shiftingRoomType || '';
-    const roomCapacity = this.getRoomCapacity(shiftingRoomType);
-    const shiftingMakkahPilgrims = this.calculatePilgrims('shiftingMakkah', rowId);
-    const numberOfRooms = Math.ceil(shiftingMakkahPilgrims / roomCapacity);
+        const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', rowId);
+        const shiftingRoomType = this.roomSettings[rowId]?.shiftingRoomType || '';
+        const roomCapacity = this.getRoomCapacity(shiftingRoomType);
 
-    this.summaryData.push({
-        area: 'Shifting Makkah',
-        from: formattedStartDate,
-        to: formattedEndDate,
-        room: rowId,
-        roomType: shiftingRoomType,
-        numberOfRooms,
-        pilgrims: shiftingMakkahPilgrims
-    });
-}
+        const numberOfRooms = Math.ceil(mainMakkahPilgrims / roomCapacity);
 
-
+        this.summaryData.push({
+            area: 'Shifting Makkah',
+            from: formattedStartDate,
+            to: formattedEndDate,
+            room: rowId,
+            roomType: shiftingRoomType,
+            numberOfRooms,
+            pilgrims: mainMakkahPilgrims,
+        });
+    }
 }
 ,
 
 
 
         pushSummaryData(area, rowId, dates) {
-    dates.sort((a, b) => a - b);
-    let startDate = dates[0];
-    let endDate = dates[dates.length - 1];
+            dates.sort((a, b) => a - b);
+            let startDate = dates[0];
+            let endDate = dates[dates.length - 1];
 
-    const formattedStartDate = this.formatDate(startDate);
-    const formattedEndDate = this.formatDate(endDate);
+            const formattedStartDate = this.formatDate(startDate);
+            const formattedEndDate = this.formatDate(endDate);
 
-    if (area === 'mainMakkah' || area === 'madinah') {
-        const roomType = this.roomSettings[rowId]?.mainRoomType || '';
-        const numberOfRooms = this.roomSettings[rowId]?.numberOfRooms || 1;
-        const pilgrims = this.getRoomCapacity(roomType) * numberOfRooms;
+            if (area === 'mainMakkah' || area === 'madinah') {
+                const roomType = this.roomSettings[rowId]?.mainRoomType || '';
+                const numberOfRooms = this.roomSettings[rowId]?.numberOfRooms || 1;
+                const pilgrims = this.getRoomCapacity(roomType) * numberOfRooms;
 
-        this.summaryData.push({
-            area,
-            from: formattedStartDate,
-            to: formattedEndDate,
-            room: rowId,
-            roomType,
-            numberOfRooms,
-            pilgrims,
-        });
-    } else if (area === 'shiftingMakkah') {
-    const shiftingRoomType = this.roomSettings[rowId]?.shiftingRoomType || '';
-    const roomCapacity = this.getRoomCapacity(shiftingRoomType);
-    const shiftingMakkahPilgrims = this.calculatePilgrims('shiftingMakkah', rowId);
-    const numberOfRooms = Math.ceil(shiftingMakkahPilgrims / roomCapacity);
+                this.summaryData.push({
+                    area,
+                    from: formattedStartDate,
+                    to: formattedEndDate,
+                    room: rowId,
+                    roomType,
+                    numberOfRooms,
+                    pilgrims,
+                });
+            } else if (area === 'shiftingMakkah') {
+                const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', rowId);
+                let shiftingRoomType = this.roomSettings[rowId]?.shiftingRoomType || '';
+                const roomCapacity = this.getRoomCapacity(shiftingRoomType);
 
-    this.summaryData.push({
-        area: 'Shifting Makkah',
-        from: formattedStartDate,
-        to: formattedEndDate,
-        room: rowId,
-        roomType: shiftingRoomType,
-        numberOfRooms,
-        pilgrims: shiftingMakkahPilgrims
-    });
-}
+                if (mainMakkahPilgrims % roomCapacity !== 0) {
+                    // Adjusting Shifting Makkah room type to match Main Makkah
+                    shiftingRoomType = this.roomSettings[rowId].mainRoomType;
+                    this.roomSettings[rowId].shiftingRoomType = shiftingRoomType;
+                }
+
+                const numberOfRooms = Math.ceil(mainMakkahPilgrims / this.getRoomCapacity(shiftingRoomType));
+
+                this.summaryData.push({
+
+                    area: 'Shifting Makkah',
+                    from: formattedStartDate,
+                    to: formattedEndDate,
+                    room: rowId,
+                    roomType: shiftingRoomType,
+                    numberOfRooms,
+                    pilgrims: mainMakkahPilgrims,
+                });
+            }
+        },
 
 
-}
-,
 
 
 
 
-
-calculatePilgrims(area, rowId) {
-    let roomType;
-    let numberOfRooms;
-
-    if (area === 'mainMakkah') {
-        roomType = this.roomSettings[rowId]?.mainRoomType || '';
-        numberOfRooms = this.roomSettings[rowId]?.numberOfRooms || 1;
-        return this.getRoomCapacity(roomType) * numberOfRooms;
-    } else if (area === 'shiftingMakkah') {
-        // Calculate the number of pilgrims in Main Makkah
-        const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', rowId);
-        
-        // Get the room capacity for Shifting Makkah
-        roomType = this.roomSettings[rowId]?.shiftingRoomType || '';
-        const shiftingRoomCapacity = this.getRoomCapacity(roomType);
-
-        // Calculate the number of rooms needed in Shifting Makkah
-        numberOfRooms = Math.ceil(mainMakkahPilgrims / shiftingRoomCapacity);
-
-        // Return the total number of pilgrims for Shifting Makkah
-        return numberOfRooms * shiftingRoomCapacity;
-    } else {
-        return 0; // For other areas, if any
-    }
-}
-
-,
+        calculatePilgrims(area, rowId) {
+            if (area === 'mainMakkah') {
+                const roomType = this.roomSettings[rowId]?.mainRoomType || '';
+                const numberOfRooms = this.roomSettings[rowId]?.numberOfRooms || 1;
+                return this.getRoomCapacity(roomType) * numberOfRooms;
+            }
+            return 0;
+        },
 
 
 
