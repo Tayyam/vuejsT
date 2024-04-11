@@ -756,44 +756,46 @@ copySelectedDates(originalRowId, newRowId) {
         },
 
         getCellText(rowId, date) {
-            const dateString = this.formatDate(date);
-            const key = `${rowId}-${dateString}`;
-            const locations = this.selectedDates[key] || []; // Fallback to an empty array
+    const dateString = this.formatDate(date);
+    const key = `${rowId}-${dateString}`;
+    const locations = this.selectedDates[key] || []; // Fallback to an empty array
 
-            let textRepresentation = '-'; // Initialize textRepresentation outside the map
+    let textRepresentation = '-'; // Initialize textRepresentation outside the map
 
-            if (locations.length) {
-                textRepresentation = locations.map(location => {
-                    const roomSetting = this.roomSettings[rowId] || {
-                        mainRoomType: 'quadruple',
-                        shiftingRoomType: 'quadruple',
-                        numberOfRooms: 1
-                    };
+    if (locations.length) {
+        textRepresentation = locations.map(location => {
+            const roomSetting = this.roomSettings[rowId] || {
+                mainRoomType: 'quadruple',
+                shiftingRoomType: 'quadruple',
+                numberOfRooms: 1
+            };
 
-                    if (location === 'shiftingMakkah') {
-                        const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', rowId);
-                        const shiftingRoomType = roomSetting.shiftingRoomType;
-                        const roomCapacity = this.getRoomCapacity(shiftingRoomType);
-                        const numberOfRooms = Math.ceil(mainMakkahPilgrims / roomCapacity);
+            if (location === 'shiftingMakkah') {
+                const mainMakkahPilgrims = this.calculatePilgrims('mainMakkah', rowId);
+                const shiftingRoomType = roomSetting.shiftingRoomType;
+                const roomCapacity = this.getRoomCapacity(shiftingRoomType);
+                const numberOfRooms = Math.ceil(mainMakkahPilgrims / roomCapacity);
+                const shiftingMakkahPilgrims = numberOfRooms * roomCapacity;
 
-                        return this.displayMode === 'rooms' ?
-                            `${numberOfRooms}` :
-                            `${mainMakkahPilgrims}`;
-                    } else {
-                        const roomType = roomSetting.mainRoomType;
-                        const roomCapacity = this.getRoomCapacity(roomType);
-                        const numberOfRooms = roomSetting.numberOfRooms;
-                        const pilgrims = roomCapacity * numberOfRooms;
+                return this.displayMode === 'rooms' ?
+                    `${numberOfRooms}` :
+                    `${shiftingMakkahPilgrims}`;
+            } else {
+                const roomType = roomSetting.mainRoomType;
+                const roomCapacity = this.getRoomCapacity(roomType);
+                const numberOfRooms = roomSetting.numberOfRooms;
+                const pilgrims = roomCapacity * numberOfRooms;
 
-                        return this.displayMode === 'rooms' ?
-                            `${numberOfRooms}` :
-                            `${pilgrims}`;
-                    }
-                }).join(', '); // Join the results from map
+                return this.displayMode === 'rooms' ?
+                    `${numberOfRooms}` :
+                    `${pilgrims}`;
             }
+        }).join(', '); // Join the results from map
+    }
 
-            return textRepresentation;
-        },
+    return textRepresentation;
+}
+,
 
 
 
