@@ -883,62 +883,74 @@ copySelectedDates(originalRowId, newRowId) {
         },
 
         reconstructStateFromSummary() {
-        // Reset existing state
-        this.roomLines = [];
-        this.selectedDates = {};
-        this.roomSettings = {};
-        this.confirmedRows = {};
+    // Reset existing state
+    this.roomLines = [];
+    this.selectedDates = {};
+    this.roomSettings = {};
+    this.confirmedRows = {};
 
-        // Create a map to track original room numbers to new sequential numbers
-        const roomNumberMap = new Map();
-        let nextRoomNumber = 1;
+    // Create a mapping from original room number to new sequential numbers
+    const roomNumberMap = new Map();
+    let nextRoomNumber = 1;
 
-        this.summaryData.forEach(summary => {
-            const originalRoomNumber = parseInt(summary.room);
+    // Iterate over each summary item
+    this.summaryData.forEach(summary => {
+        const originalRoomNumber = parseInt(summary.room);
 
-            // Check if this original room number already has a mapped new number
-            if (!roomNumberMap.has(originalRoomNumber)) {
-                roomNumberMap.set(originalRoomNumber, nextRoomNumber++);
-            }
+        // If this is a new room number, initialize its settings
+        if (!roomNumberMap.has(originalRoomNumber)) {
+            roomNumberMap.set(originalRoomNumber, nextRoomNumber);
+            this.roomLines.push(null); // Add a new line for this room
 
-            const newRoomNumber = roomNumberMap.get(originalRoomNumber);
+            // Initialize room settings for new room number
+            this.roomSettings[nextRoomNumber] = {
+                mainRoomType: 'default',
+                shiftingRoomType: 'default',
+                numberOfRooms: 0
+            };
+            nextRoomNumber++;
+        }
 
-            // Adjust summary to reflect new room number
-            summary.room = newRoomNumber.toString();
+        const newRoomNumber = roomNumberMap.get(originalRoomNumber);
 
-            // Update other data structures as required
-            if (!this.roomLines[newRoomNumber - 1]) {
-                this.roomLines[newRoomNumber - 1] = null;
-                this.roomSettings[newRoomNumber] = {
-                    mainRoomType: summary.roomType,
-                    shiftingRoomType: summary.roomType, // Assuming the same room type for shifting
-                    numberOfRooms: summary.numberOfRooms
-                };
-                this.populateSelectedDatesFromSummary(summary, newRoomNumber);
-                this.confirmedRows[newRoomNumber] = true;
-            }
-        });
+        // Update room settings based on the area
+        if (summary.area === 'mainMakkah' || summary.area === 'madinah') {
+            this.roomSettings[newRoomNumber].mainRoomType = summary.roomType;
+        } else if (summary.area === 'Shifting Makkah') {
+            this.roomSettings[newRoomNumber].shiftingRoomType = summary.roomType;
+        }
 
-        // Force a UI update
-        this.selectedDates = { ...this.selectedDates };
-        this.roomSettings = { ...this.roomSettings };
-        this.confirmedRows = { ...this.confirmedRows };
-    },
+        // Update room number based on the area
+        this.roomSettings[newRoomNumber].numberOfRooms = summary.numberOfRooms;
 
-    populateSelectedDatesFromSummary(summary, lineIndex) {
-        let current = new Date(2024, parseInt(summary.from.split('/')[1]) - 1, parseInt(summary.from.split('/')[0]));
-        const end = new Date(2024, parseInt(summary.to.split('/')[1]) - 1, parseInt(summary.to.split('/')[0]));
-        while (current <= end) {
-            const key = `${lineIndex}-${this.formatDate(current)}`;
-            const area = summary.area === 'Shifting Makkah' ? 'shiftingMakkah' : summary.area;
+
+
+
+
+        // Populate selected dates for this summary entry
+        let currentDate = new Date(2024, parseInt(summary.from.split('/')[1]) - 1, parseInt(summary.from.split('/')[0]));
+        const endDate = new Date(2024, parseInt(summary.to.split('/')[1]) - 1, parseInt(summary.to.split('/')[0]));
+        const area = summary.area === 'Shifting Makkah' ? 'shiftingMakkah' : summary.area;
+
+        while (currentDate <= endDate) {
+            const key = `${newRoomNumber}-${this.formatDate(currentDate)}`;
             if (!this.selectedDates[key]) {
                 this.selectedDates[key] = [area];
             } else if (!this.selectedDates[key].includes(area)) {
                 this.selectedDates[key].push(area);
             }
-            current.setDate(current.getDate() + 1);
+            currentDate.setDate(currentDate.getDate() + 1);
         }
-    },
+
+        // Confirm the room line
+        this.confirmedRows[newRoomNumber] = true;
+    });
+
+    // Force a UI update
+    this.selectedDates = { ...this.selectedDates };
+    this.roomSettings = { ...this.roomSettings };
+    this.confirmedRows = { ...this.confirmedRows };
+},
 
 
 
